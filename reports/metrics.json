@@ -1,0 +1,55 @@
+{
+  "audit": {
+    "action_types": {
+      "ban": 4150,
+      "pick": 4180
+    },
+    "battles": {
+      "bp": 419,
+      "bp_not_in_players": 0,
+      "players": 419,
+      "players_not_in_bp": 0
+    },
+    "bp_lengths": {
+      "7": 2,
+      "8": 2,
+      "20": 415
+    },
+    "camps": {
+      "1": 4163,
+      "2": 4167
+    },
+    "duplicate_order_battles": 0,
+    "heroes": 103,
+    "non_monotonic_battles": 0,
+    "player_rows_per_battle": {
+      "10": 419
+    },
+    "rows": {
+      "bp": 8330,
+      "hero_stats": 271,
+      "players": 4190
+    }
+  },
+  "policy": {
+    "legal_rate": 1.0,
+    "test_total": 1660,
+    "top1": 0.1572289156626506,
+    "top3": 0.3156626506024096,
+    "top5": 0.42048192771084336
+  },
+  "samples": {
+    "bp_test": 1660,
+    "bp_total": 8300,
+    "bp_train": 6640,
+    "lineup_test": 166,
+    "lineup_total": 830,
+    "lineup_train": 664
+  },
+  "schedule_steps": 20,
+  "value": {
+    "accuracy": 0.43373493975903615,
+    "brier": 0.2493263234641459,
+    "total": 166
+  }
+}

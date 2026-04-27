@@ -1,0 +1,32 @@
+{
+  "action_types": {
+    "ban": 4150,
+    "pick": 4180
+  },
+  "battles": {
+    "bp": 419,
+    "bp_not_in_players": 0,
+    "players": 419,
+    "players_not_in_bp": 0
+  },
+  "bp_lengths": {
+    "7": 2,
+    "8": 2,
+    "20": 415
+  },
+  "camps": {
+    "1": 4163,
+    "2": 4167
+  },
+  "duplicate_order_battles": 0,
+  "heroes": 103,
+  "non_monotonic_battles": 0,
+  "player_rows_per_battle": {
+    "10": 419
+  },
+  "rows": {
+    "bp": 8330,
+    "hero_stats": 271,
+    "players": 4190
+  }
+}
