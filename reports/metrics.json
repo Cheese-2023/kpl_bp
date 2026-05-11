@@ -21,6 +21,7 @@
     },
     "duplicate_order_battles": 0,
     "heroes": 103,
+    "inferred_camp_teams": 838,
     "non_monotonic_battles": 0,
     "player_rows_per_battle": {
       "10": 419
@@ -31,12 +32,21 @@
       "players": 4190
     }
   },
+  "feature_counts": {
+    "player_strengths": 110,
+    "target_ban_priors": 18,
+    "team_ban_priors": 18,
+    "team_pick_priors": 18,
+    "team_strengths": 18,
+    "value_matchup_effects": 1964,
+    "value_pair_effects": 826
+  },
   "policy": {
     "legal_rate": 1.0,
     "test_total": 1660,
-    "top1": 0.1572289156626506,
-    "top3": 0.3156626506024096,
-    "top5": 0.42048192771084336
+    "top1": 0.1746987951807229,
+    "top3": 0.3481927710843373,
+    "top5": 0.44156626506024094
   },
   "samples": {
     "bp_test": 1660,
@@ -48,8 +58,13 @@
   },
   "schedule_steps": 20,
   "value": {
-    "accuracy": 0.43373493975903615,
-    "brier": 0.2493263234641459,
+    "accuracy": 0.46987951807228917,
+    "brier": 0.24833487393031897,
+    "total": 166
+  },
+  "value_with_team_strength": {
+    "accuracy": 0.5903614457831325,
+    "brier": 0.26877941039892694,
     "total": 166
   }
 }

@@ -43,7 +43,11 @@ def train_agent(args: argparse.Namespace) -> dict[str, object]:
     hero_pool = all_heroes(bp_steps, player_rows, hero_stats)
 
     audit = audit_tables(bp_steps, player_rows, hero_stats)
-    bp_samples = build_bp_samples(bp_steps, full_battles_only=not args.include_incomplete)
+    bp_samples = build_bp_samples(
+        bp_steps,
+        player_rows,
+        full_battles_only=not args.include_incomplete,
+    )
     lineup_samples = build_lineup_samples(bp_steps, player_rows, full_battles_only=not args.include_incomplete)
     train_battles, test_battles = split_battles_by_time(sample.state.battle_id for sample in bp_samples)
 
@@ -58,7 +62,12 @@ def train_agent(args: argparse.Namespace) -> dict[str, object]:
     agent = BPAgent(policy_model, value_model, schedule, hero_pool)
 
     policy_eval = policy_model.evaluate(test_bp_samples)
-    value_eval = value_accuracy(value_model, test_lineup_samples)
+    value_eval = value_accuracy(value_model, test_lineup_samples, include_strength=False)
+    value_eval_with_strength = value_accuracy(
+        value_model,
+        test_lineup_samples,
+        include_strength=True,
+    )
     metrics = {
         "audit": audit,
         "samples": {
@@ -77,6 +86,16 @@ def train_agent(args: argparse.Namespace) -> dict[str, object]:
             "legal_rate": policy_eval.legal_rate,
         },
         "value": value_eval,
+        "value_with_team_strength": value_eval_with_strength,
+        "feature_counts": {
+            "team_pick_priors": len(policy_model.team_pick_priors),
+            "team_ban_priors": len(policy_model.team_ban_priors),
+            "target_ban_priors": len(policy_model.target_ban_priors),
+            "value_pair_effects": len(value_model.pair_effects),
+            "value_matchup_effects": len(value_model.matchup_effects),
+            "team_strengths": len(value_model.team_strengths),
+            "player_strengths": len(value_model.player_strengths),
+        },
         "schedule_steps": len(schedule),
     }
 

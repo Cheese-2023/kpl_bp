@@ -92,7 +92,13 @@ class BPAgent:
         else:
             own_picks = state.camp2_picks
             enemy_picks = state.camp1_picks
-        return self.value_model.predict(own_picks, enemy_picks)
+        return self.value_model.predict(
+            own_picks,
+            enemy_picks,
+            state.own_team(),
+            state.enemy_team(),
+            include_strength=False,
+        )
 
     def _search(self, state: BPState, perspective_camp: int, depth: int, width: int) -> float:
         if depth <= 0 or state.order >= len(self.schedule):

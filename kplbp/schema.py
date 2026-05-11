@@ -50,6 +50,8 @@ class BPState:
     banned: list[str] = field(default_factory=list)
     camp1_picks: list[str] = field(default_factory=list)
     camp2_picks: list[str] = field(default_factory=list)
+    camp1_team: str | None = None
+    camp2_team: str | None = None
 
     def used_heroes(self) -> set[str]:
         return set(self.banned) | set(self.camp1_picks) | set(self.camp2_picks)
@@ -59,6 +61,12 @@ class BPState:
 
     def enemy_picks(self) -> list[str]:
         return self.camp2_picks if self.camp == 1 else self.camp1_picks
+
+    def own_team(self) -> str | None:
+        return self.camp1_team if self.camp == 1 else self.camp2_team
+
+    def enemy_team(self) -> str | None:
+        return self.camp2_team if self.camp == 1 else self.camp1_team
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -70,6 +78,8 @@ class BPState:
             "banned": list(self.banned),
             "camp1_picks": list(self.camp1_picks),
             "camp2_picks": list(self.camp2_picks),
+            "camp1_team": self.camp1_team,
+            "camp2_team": self.camp2_team,
         }
 
 
@@ -86,3 +96,7 @@ class LineupSample:
     own_picks: tuple[str, ...]
     enemy_picks: tuple[str, ...]
     win: int
+    team: str | None = None
+    enemy_team: str | None = None
+    players: tuple[str, ...] = ()
+    enemy_players: tuple[str, ...] = ()

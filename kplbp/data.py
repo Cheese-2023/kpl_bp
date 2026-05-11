@@ -79,6 +79,35 @@ def group_players_by_battle(rows: Iterable[PlayerRow]) -> dict[str, list[PlayerR
     return dict(battles)
 
 
+def infer_camp_metadata(
+    bp_steps: list[BPStep],
+    player_rows: list[PlayerRow],
+) -> dict[tuple[str, int], dict[str, object]]:
+    bp_by_battle = group_bp_by_battle(bp_steps)
+    players_by_battle = group_players_by_battle(player_rows)
+    metadata: dict[tuple[str, int], dict[str, object]] = {}
+    for battle_id, steps in bp_by_battle.items():
+        player_rows_for_battle = players_by_battle.get(battle_id, [])
+        hero_to_player = {row.hero: row for row in player_rows_for_battle}
+        for camp in (1, 2):
+            pick_steps = [
+                step for step in steps if step.action_type == "pick" and step.camp == camp
+            ]
+            rows = [
+                hero_to_player[step.hero]
+                for step in pick_steps
+                if step.hero in hero_to_player
+            ]
+            teams = Counter(row.team for row in rows)
+            team = teams.most_common(1)[0][0] if teams else None
+            metadata[(battle_id, camp)] = {
+                "team": team,
+                "players": tuple(row.player for row in rows),
+                "wins": tuple(row.win for row in rows),
+            }
+    return metadata
+
+
 def all_heroes(
     steps: Iterable[BPStep],
     player_rows: Iterable[PlayerRow],
@@ -106,6 +135,7 @@ def audit_tables(
 ) -> dict[str, object]:
     bp_by_battle = group_bp_by_battle(bp_steps)
     players_by_battle = group_players_by_battle(player_rows)
+    camp_metadata = infer_camp_metadata(bp_steps, player_rows)
     bp_lengths = Counter(len(rows) for rows in bp_by_battle.values())
     player_lengths = Counter(len(rows) for rows in players_by_battle.values())
     action_types = Counter(step.action_type for step in bp_steps)
@@ -137,15 +167,23 @@ def audit_tables(
         "camps": dict(camps),
         "duplicate_order_battles": duplicate_step_battles,
         "non_monotonic_battles": non_monotonic_battles,
+        "inferred_camp_teams": sum(1 for meta in camp_metadata.values() if meta["team"]),
         "heroes": len(all_heroes(bp_steps, player_rows, hero_stats)),
     }
 
 
-def build_bp_samples(bp_steps: list[BPStep], full_battles_only: bool = True) -> list[BPSample]:
+def build_bp_samples(
+    bp_steps: list[BPStep],
+    player_rows: list[PlayerRow] | None = None,
+    full_battles_only: bool = True,
+) -> list[BPSample]:
     samples: list[BPSample] = []
+    camp_metadata = infer_camp_metadata(bp_steps, player_rows or [])
     for battle_id, steps in group_bp_by_battle(bp_steps).items():
         if full_battles_only and len(steps) != 20:
             continue
+        camp1_team = camp_metadata.get((battle_id, 1), {}).get("team")
+        camp2_team = camp_metadata.get((battle_id, 2), {}).get("team")
         banned: list[str] = []
         camp1_picks: list[str] = []
         camp2_picks: list[str] = []
@@ -159,6 +197,8 @@ def build_bp_samples(bp_steps: list[BPStep], full_battles_only: bool = True) -> 
                 banned=list(banned),
                 camp1_picks=list(camp1_picks),
                 camp2_picks=list(camp2_picks),
+                camp1_team=str(camp1_team) if camp1_team else None,
+                camp2_team=str(camp2_team) if camp2_team else None,
             )
             samples.append(BPSample(state=state, label=step.hero))
             if step.action_type == "ban":
@@ -175,20 +215,11 @@ def infer_camp_wins(
     player_rows: list[PlayerRow],
 ) -> dict[tuple[str, int], int]:
     bp_by_battle = group_bp_by_battle(bp_steps)
-    players_by_battle = group_players_by_battle(player_rows)
+    camp_metadata = infer_camp_metadata(bp_steps, player_rows)
     result: dict[tuple[str, int], int] = {}
-    for battle_id, steps in bp_by_battle.items():
-        player_rows_for_battle = players_by_battle.get(battle_id, [])
-        hero_to_player = {row.hero: row for row in player_rows_for_battle}
+    for battle_id in bp_by_battle:
         for camp in (1, 2):
-            camp_pick_steps = [
-                step for step in steps if step.action_type == "pick" and step.camp == camp
-            ]
-            wins = [
-                hero_to_player[step.hero].win
-                for step in camp_pick_steps
-                if step.hero in hero_to_player
-            ]
+            wins = list(camp_metadata.get((battle_id, camp), {}).get("wins", ()))
             if wins:
                 result[(battle_id, camp)] = 1 if sum(wins) >= len(wins) / 2 else 0
     return result
@@ -200,6 +231,7 @@ def build_lineup_samples(
     full_battles_only: bool = True,
 ) -> list[LineupSample]:
     camp_wins = infer_camp_wins(bp_steps, player_rows)
+    camp_metadata = infer_camp_metadata(bp_steps, player_rows)
     samples: list[LineupSample] = []
     for battle_id, steps in group_bp_by_battle(bp_steps).items():
         if full_battles_only and len(steps) != 20:
@@ -215,6 +247,8 @@ def build_lineup_samples(
             if win is None:
                 continue
             enemy_camp = 2 if camp == 1 else 1
+            own_meta = camp_metadata.get((battle_id, camp), {})
+            enemy_meta = camp_metadata.get((battle_id, enemy_camp), {})
             samples.append(
                 LineupSample(
                     battle_id=battle_id,
@@ -222,6 +256,10 @@ def build_lineup_samples(
                     own_picks=tuple(picks_by_camp[camp]),
                     enemy_picks=tuple(picks_by_camp[enemy_camp]),
                     win=win,
+                    team=own_meta.get("team"),
+                    enemy_team=enemy_meta.get("team"),
+                    players=tuple(own_meta.get("players", ())),
+                    enemy_players=tuple(enemy_meta.get("players", ())),
                 )
             )
     return samples

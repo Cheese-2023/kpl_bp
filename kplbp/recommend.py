@@ -33,6 +33,8 @@ def build_state(args: argparse.Namespace) -> BPState:
             banned=list(raw.get("banned", [])),
             camp1_picks=list(raw.get("camp1_picks", [])),
             camp2_picks=list(raw.get("camp2_picks", [])),
+            camp1_team=raw.get("camp1_team"),
+            camp2_team=raw.get("camp2_team"),
         )
     return BPState(
         match_id="manual",
@@ -43,6 +45,8 @@ def build_state(args: argparse.Namespace) -> BPState:
         banned=parse_hero_list(args.banned),
         camp1_picks=parse_hero_list(args.camp1_picks),
         camp2_picks=parse_hero_list(args.camp2_picks),
+        camp1_team=args.camp1_team,
+        camp2_team=args.camp2_team,
     )
 
 
@@ -56,6 +60,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--banned", default="", help="Comma-separated banned heroes.")
     parser.add_argument("--camp1-picks", default="", help="Comma-separated camp 1 picked heroes.")
     parser.add_argument("--camp2-picks", default="", help="Comma-separated camp 2 picked heroes.")
+    parser.add_argument("--camp1-team", help="Camp 1 team name, used for team preference features.")
+    parser.add_argument("--camp2-team", help="Camp 2 team name, used for team preference features.")
     parser.add_argument("--top-k", type=int, default=5, help="Number of recommendations.")
     parser.add_argument("--search-depth", type=int, default=2, help="Lookahead depth.")
     return parser

@@ -20,6 +20,7 @@
   },
   "duplicate_order_battles": 0,
   "heroes": 103,
+  "inferred_camp_teams": 838,
   "non_monotonic_battles": 0,
   "player_rows_per_battle": {
     "10": 419
