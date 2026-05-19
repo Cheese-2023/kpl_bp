@@ -35,13 +35,20 @@ Agent 输出 TopK 推荐：
 ├── KPL_hero_2023_2026.csv
 ├── kpl_bp.csv
 ├── kpl_players.csv
+├── hero_meta.csv
+├── docs/
+│   └── BP_EXPERIENCE.md
 ├── kplbp/
 │   ├── agent.py
+│   ├── analysis.py
+│   ├── api.py
 │   ├── data.py
 │   ├── models.py
 │   ├── recommend.py
 │   ├── schema.py
 │   └── train.py
+├── web/
+│   └── index.html
 ├── models/
 │   └── kpl_bp_agent.json
 ├── reports/
@@ -54,6 +61,8 @@ Agent 输出 TopK 推荐：
 
 - `kplbp/schema.py`：定义 BP 步骤、选手数据、英雄统计、BP 状态和训练样本。
 - `kplbp/data.py`：读取 CSV、审计数据、展开 BP 样本、构建阵容胜率样本。
+- `kplbp/analysis.py`：基于英雄元数据做阵容结构、缺陷、强点和游戏思路分析。
+- `kplbp/api.py`：提供前端页面和元数据问答 API。
 - `kplbp/models.py`：实现策略模型 `PolicyModel` 和阵容价值模型 `ValueModel`。
 - `kplbp/agent.py`：组合策略模型、价值模型和浅层搜索，输出最终推荐。
 - `kplbp/train.py`：训练入口。
@@ -107,6 +116,23 @@ Agent 输出 TopK 推荐：
 - `pick_rate`：pick 率
 
 这些数据会作为先验，帮助模型在样本量较少时避免过拟合。
+
+### `hero_meta.csv`
+
+英雄元数据表，用于前端查询、阵容结构分析和问答 API。
+
+字段：
+
+- `hero`：英雄名称，需与 BP 和选手表中的英雄名称一致。
+- `lane`：主推荐分路，例如对抗路、打野、中路、发育路、游走。
+- `role`：英雄职业或功能定位，例如射手、法师、战士、坦克、辅助、刺客、法刺。
+- `damage_type`：主要伤害类型，例如物理、法术、真实伤害、混伤。
+- `tags`：阵容标签，用英文分号 `;` 分隔，例如开团、保护、消耗、后期、单带、切后排。
+- `alt_lanes`：可选副分路，用英文分号 `;` 分隔，例如 `打野;游走`。
+
+这张表会被 `/api/heroes`、`/api/analyze` 和 `/api/ask` 使用。后续如果想提升阵容分析质量，优先维护这张表。
+
+英雄位置不是固定的。前端会按照 `lane + alt_lanes` 将英雄展示到多个分路中，阵容分析也会基于多分路判断阵容是否完整。
 
 ## 当前建模思路
 
@@ -228,6 +254,168 @@ python3 -m kplbp.recommend \
 ```bash
 python3 -m kplbp.recommend --state-json '{"order":4,"camp":1,"action_type":"pick","banned":["狄仁杰","鲁班大师","狂铁","盾山"],"camp1_picks":[],"camp2_picks":[],"camp1_team":"北京JDG","camp2_team":"武汉eStarPro"}'
 ```
+
+## 前端页面和 API
+
+当前项目已经可以作为一个完整的轻量前后端项目运行：
+
+- 后端：`python3 -m kplbp.api`
+- 前端：`web/index.html`，由后端静态托管
+- 本地模型：`models/kpl_bp_agent.json`
+- 英雄元数据：`hero_meta.csv`
+- 云端模型：DeepSeek，可选启用
+
+启动本地服务：
+
+```bash
+python3 -m kplbp.api
+```
+
+默认访问：
+
+```text
+http://127.0.0.1:8000
+```
+
+可以指定端口：
+
+```bash
+python3 -m kplbp.api --host 0.0.0.0 --port 8080
+```
+
+### DeepSeek 配置
+
+不要把 API Key 写进代码、README 或提交到仓库。启动服务前在终端设置环境变量：
+
+```bash
+export DEEPSEEK_API_KEY="你的 DeepSeek API Key"
+python3 -m kplbp.api
+```
+
+后端会读取 `DEEPSEEK_API_KEY`，通过 `/api/deepseek` 调用 DeepSeek。若没有设置环境变量，接口会返回本地标签分析和已经构造好的提示词，方便调试。
+
+可以指定 DeepSeek 模型名：
+
+```bash
+python3 -m kplbp.api --deepseek-model deepseek-chat
+```
+
+### BP 模拟器
+
+访问 `http://127.0.0.1:8000` 后，可以在页面完成以下操作：
+
+1. 输入蓝方和红方队伍名称。
+2. 选择赛制：单局、BO3 全局 BP、BO5 全局 BP、BO7 全局 BP、BO5/BO7 带最后一局巅峰对决。
+3. 选择当前第几局，并填写双方全局已用英雄池。
+4. 按当前 BP 步骤点击英雄，完成 ban 或 pick。
+5. 每一步后端会调用本地 BP Agent 返回推荐候选。
+6. 可以点击推荐英雄快速落子。
+7. 可以撤销一步或重置 BP。
+8. 可以调用本地标签分析、DeepSeek 自定义提问，或一键实时分析当前 BP。
+
+### 赛制规则说明
+
+当前规则层实现了几种常用模拟方式：
+
+- `single`：单局普通 BP，使用模型从历史数据学习到的 20 步 BP 顺序。
+- `bo3_global`：BO3 全局 BP，后续局本方不能重复 pick 自己前面局已经使用过的英雄。
+- `bo5_global`：BO5 全局 BP。
+- `bo7_global`：BO7 全局 BP。
+- `bo5_peak`：BO5 全局 BP + 最后一局巅峰对决。
+- `bo7_peak`：BO7 全局 BP + 第七局巅峰对决。
+
+全局 BP 的过滤规则：
+
+- pick 时过滤本方在前面局已经使用过的英雄。
+- ban 推荐会优先过滤敌方已经无法再 pick 的英雄，避免推荐低价值 ban。
+- 当前局已经 ban/pick 的英雄不会再次出现。
+
+巅峰对决当前实现为无 ban 的 10 手 pick 顺序，用于模拟最后一局快速阵容选择。由于历史训练数据主要来自普通 BP，巅峰对决推荐仍然复用本地策略模型和阵容价值模型，后续如果有专门的巅峰对决数据，可以单独训练该模式。
+
+### API 列表
+
+健康检查：
+
+```bash
+curl http://127.0.0.1:8000/api/health
+```
+
+查询英雄元数据：
+
+```bash
+curl http://127.0.0.1:8000/api/heroes
+```
+
+获取 BP 模拟器配置，包括英雄池和 BP 顺序：
+
+```bash
+curl http://127.0.0.1:8000/api/bp/config
+```
+
+获取当前 BP 状态下的本地模型推荐：
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/bp/recommend \
+  -H 'Content-Type: application/json' \
+  -d '{"mode":"bo7_peak","game_index":2,"actions":[{"hero":"狄仁杰"},{"hero":"鲁班大师"},{"hero":"狂铁"},{"hero":"盾山"}],"camp1_global_used":"公孙离,沈梦溪","camp2_global_used":"戈娅,小乔","camp1_team":"北京JDG","camp2_team":"武汉eStarPro","top_k":5}'
+```
+
+分析阵容：
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/analyze \
+  -H 'Content-Type: application/json' \
+  -d '{"heroes":["公孙离","沈梦溪","张飞"],"enemy_heroes":["戈娅","小乔","苏烈"]}'
+```
+
+基于英雄标签回答问题：
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/ask \
+  -H 'Content-Type: application/json' \
+  -d '{"heroes":["公孙离","沈梦溪","张飞"],"enemy_heroes":["戈娅","小乔","苏烈"],"question":"这个阵容有什么缺陷？游戏思路怎么打？"}'
+```
+
+当前问答 API 是规则型分析器，不依赖外部大模型。它会查询 `hero_meta.csv`，根据英雄分路、职业、伤害类型和标签回答阵容缺陷、强点、游戏思路和对敌方阵容的应对。
+
+调用 DeepSeek 分析当前 BP：
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/deepseek \
+  -H 'Content-Type: application/json' \
+  -d '{"mode":"bo7_peak","game_index":2,"actions":[{"hero":"狄仁杰"},{"hero":"鲁班大师"},{"hero":"狂铁"},{"hero":"盾山"}],"heroes":["公孙离","沈梦溪","张飞"],"enemy_heroes":["戈娅","小乔","苏烈"],"question":"请分析当前 BP 下一手怎么选，以及这套阵容的游戏思路。"}'
+```
+
+DeepSeek 的提示词会包含：
+
+- 用户问题
+- 当前 BP 状态
+- 本地 BP Agent 推荐
+- 基于 `hero_meta.csv` 的阵容标签分析
+- `docs/BP_EXPERIENCE.md` 中的 BP 经验知识库
+- 要求模型分别输出蓝方优势/短板、红方优势/短板、下一手建议、全局 BP 资源判断、双方前中后期思路和风险点
+
+### BP 经验知识库
+
+`docs/BP_EXPERIENCE.md` 用来给本地检索和 DeepSeek 分析提供背景知识，包含：
+
+- BP 基本原则
+- 阵容结构检查
+- 常见体系，例如大乔体系、太乙保护体系、盾山反消耗体系
+- 常见克制关系，例如强开克制消耗、保护克制突进、真实伤害克制厚前排
+- 全局 BP 资源管理经验
+- 巅峰对决经验
+
+后续如果你想让云端回答更贴近你的理解，可以优先维护这份文档。
+
+### 全局 BP 推荐策略
+
+在 BO3/BO5/BO7 全局 BP 中，本地推荐会额外做“资源保留”重排：
+
+- 根据英雄 pick 率、ban 率、胜率估计英雄资源优先级。
+- 早期局如果还有较多后续局，会轻微降低高优先级英雄的推荐分。
+- 目的不是禁止选择强势英雄，而是提醒模型：当多个候选接近时，不要过早把所有核心资源消耗完。
+- 推荐结果中可能出现 `reserve_penalty` 和 `strategy_note`，表示该英雄受到了全局 BP 资源保留策略影响。
 
 ## 指标解释
 

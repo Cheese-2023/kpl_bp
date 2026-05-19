@@ -6,7 +6,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Iterable
 
-from .schema import BPSample, BPState, BPStep, HeroStats, LineupSample, PlayerRow
+from .schema import BPSample, BPState, BPStep, HeroMeta, HeroStats, LineupSample, PlayerRow
 
 
 def read_csv_dicts(path: str | Path) -> list[dict[str, str]]:
@@ -63,6 +63,29 @@ def load_hero_stats(path: str | Path) -> list[HeroStats]:
         )
         for row in rows
     ]
+
+
+def load_hero_meta(path: str | Path) -> dict[str, HeroMeta]:
+    rows = read_csv_dicts(path)
+    result: dict[str, HeroMeta] = {}
+    for row in rows:
+        hero = row["hero"].strip()
+        lane = row["lane"].strip()
+        alt_lanes = [
+            lane.strip()
+            for lane in (row.get("alt_lanes") or "").split(";")
+            if lane.strip()
+        ]
+        lanes = tuple(dict.fromkeys([lane, *alt_lanes]))
+        result[hero] = HeroMeta(
+            hero=hero,
+            lane=lane,
+            lanes=lanes,
+            role=row["role"].strip(),
+            damage_type=row["damage_type"].strip(),
+            tags=tuple(tag.strip() for tag in row["tags"].split(";") if tag.strip()),
+        )
+    return result
 
 
 def group_bp_by_battle(steps: Iterable[BPStep]) -> dict[str, list[BPStep]]:

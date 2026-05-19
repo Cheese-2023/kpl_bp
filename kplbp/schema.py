@@ -40,6 +40,26 @@ class HeroStats:
     pick_rate: float
 
 
+@dataclass(frozen=True)
+class HeroMeta:
+    hero: str
+    lane: str
+    lanes: tuple[str, ...]
+    role: str
+    damage_type: str
+    tags: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "hero": self.hero,
+            "lane": self.lane,
+            "lanes": list(self.lanes),
+            "role": self.role,
+            "damage_type": self.damage_type,
+            "tags": list(self.tags),
+        }
+
+
 @dataclass
 class BPState:
     match_id: str

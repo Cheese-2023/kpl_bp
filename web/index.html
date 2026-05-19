@@ -1,0 +1,743 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>KPL BP 模拟器</title>
+    <style>
+      :root {
+        --bg: #0d1220;
+        --panel: #161f33;
+        --panel2: #1e2942;
+        --text: #f2f6ff;
+        --muted: #9aa8c7;
+        --line: #314061;
+        --gold: #f4c86a;
+        --blue: #75aaff;
+        --red: #ff8585;
+        --green: #76e0ac;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 12% 0%, rgba(117, 170, 255, 0.2), transparent 34rem),
+          radial-gradient(circle at 88% 12%, rgba(244, 200, 106, 0.13), transparent 30rem),
+          var(--bg);
+        color: var(--text);
+        font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+      }
+
+      header {
+        padding: 32px min(5vw, 64px) 18px;
+      }
+
+      h1 {
+        margin: 8px 0 10px;
+        font-size: clamp(34px, 5vw, 62px);
+        line-height: 1.04;
+      }
+
+      .eyebrow {
+        color: var(--gold);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.18em;
+      }
+
+      .subtitle {
+        max-width: 900px;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+
+      main {
+        display: grid;
+        grid-template-columns: 360px 1fr 390px;
+        gap: 18px;
+        padding: 0 min(5vw, 64px) 42px;
+      }
+
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: linear-gradient(145deg, rgba(30, 41, 66, 0.94), rgba(18, 26, 45, 0.94));
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.3);
+        padding: 18px;
+      }
+
+      .panel h2 {
+        margin: 0 0 14px;
+        font-size: 20px;
+      }
+
+      label {
+        display: block;
+        margin: 12px 0 7px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      input,
+      textarea,
+      select {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 13px;
+        background: rgba(7, 12, 24, 0.62);
+        color: var(--text);
+        padding: 11px 12px;
+        outline: none;
+        font: inherit;
+      }
+
+      textarea {
+        min-height: 94px;
+        resize: vertical;
+      }
+
+      button {
+        border: 0;
+        border-radius: 14px;
+        background: linear-gradient(135deg, var(--gold), #ff9d5c);
+        color: #16100a;
+        cursor: pointer;
+        font-weight: 800;
+        padding: 11px 14px;
+      }
+
+      button.secondary {
+        border: 1px solid rgba(117, 170, 255, 0.42);
+        background: rgba(117, 170, 255, 0.14);
+        color: var(--text);
+      }
+
+      button.danger {
+        border: 1px solid rgba(255, 133, 133, 0.38);
+        background: rgba(255, 133, 133, 0.12);
+        color: var(--red);
+      }
+
+      .button-row {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        margin-top: 14px;
+      }
+
+      .current-step {
+        border: 1px solid rgba(244, 200, 106, 0.35);
+        border-radius: 18px;
+        background: rgba(244, 200, 106, 0.08);
+        padding: 14px;
+        margin-bottom: 14px;
+      }
+
+      .current-step strong {
+        color: var(--gold);
+      }
+
+      .bp-board {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+
+      .side {
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: rgba(9, 14, 27, 0.5);
+        padding: 14px;
+      }
+
+      .side h3 {
+        margin: 0 0 12px;
+      }
+
+      .blue h3 {
+        color: var(--blue);
+      }
+
+      .red h3 {
+        color: var(--red);
+      }
+
+      .slot-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 8px;
+        margin-bottom: 14px;
+      }
+
+      .slot {
+        min-height: 46px;
+        border: 1px dashed var(--line);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--muted);
+        font-size: 13px;
+        text-align: center;
+        padding: 6px;
+      }
+
+      .slot.filled {
+        border-style: solid;
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      .timeline {
+        display: grid;
+        grid-template-columns: repeat(10, minmax(0, 1fr));
+        gap: 6px;
+        margin-top: 16px;
+      }
+
+      .step {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--muted);
+        font-size: 12px;
+        padding: 8px 5px;
+        text-align: center;
+      }
+
+      .step.done {
+        color: var(--text);
+        border-color: rgba(118, 224, 172, 0.38);
+      }
+
+      .step.active {
+        color: var(--gold);
+        border-color: var(--gold);
+      }
+
+      .hero-list {
+        max-height: 520px;
+        overflow: auto;
+        padding-right: 5px;
+      }
+
+      .mode-grid {
+        display: grid;
+        grid-template-columns: 1fr 110px;
+        gap: 10px;
+      }
+
+      .lane-section {
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 16px;
+        margin-bottom: 10px;
+        overflow: hidden;
+      }
+
+      .lane-title {
+        display: flex;
+        justify-content: space-between;
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--gold);
+        font-size: 13px;
+        font-weight: 800;
+        padding: 8px 10px;
+      }
+
+      .lane-heroes {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+        gap: 8px;
+        padding: 10px;
+      }
+
+      .hero-card {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.045);
+        color: var(--text);
+        cursor: pointer;
+        min-height: 72px;
+        padding: 9px;
+        text-align: left;
+      }
+
+      .hero-card:hover {
+        border-color: var(--gold);
+      }
+
+      .hero-card.disabled {
+        cursor: not-allowed;
+        opacity: 0.35;
+      }
+
+      .hero-card .meta {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 4px;
+      }
+
+      .recommendation {
+        display: grid;
+        gap: 9px;
+      }
+
+      .rec {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+        align-items: center;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.045);
+        padding: 10px;
+      }
+
+      .rec b {
+        color: var(--gold);
+      }
+
+      .rec small {
+        color: var(--muted);
+      }
+
+      .analysis-box {
+        white-space: pre-wrap;
+        color: var(--text);
+        line-height: 1.72;
+        max-height: 420px;
+        overflow: auto;
+      }
+
+      .hint {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.6;
+        margin-top: 6px;
+      }
+
+      .status {
+        min-height: 24px;
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      @media (max-width: 1200px) {
+        main {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="eyebrow">KPL BP SIMULATOR</div>
+      <h1>模拟完整 BP，每一步让模型给你候选。</h1>
+      <p class="subtitle">
+        按职业 BP 顺序点击英雄完成 ban/pick。后端会调用本地训练好的 BP Agent 返回当前步骤推荐，也可以调用 DeepSeek 对当前 BP 或阵容做云端复盘。
+      </p>
+    </header>
+
+    <main>
+      <section class="panel">
+        <h2>模拟设置</h2>
+        <label>蓝方队伍</label>
+        <input id="camp1Team" placeholder="例如 北京JDG" />
+        <label>红方队伍</label>
+        <input id="camp2Team" placeholder="例如 武汉eStarPro" />
+        <label>赛制与当前局</label>
+        <div class="mode-grid">
+          <select id="matchMode"></select>
+          <select id="gameIndex"></select>
+        </div>
+        <div class="hint">全局 BP 模式下，已用英雄会在后续局自动从本方 pick 候选里过滤；巅峰对决自动切换为无 ban 的 10 手 pick。</div>
+        <label>蓝方全局已用英雄，逗号分隔</label>
+        <textarea id="camp1GlobalUsed" placeholder="例如 公孙离,沈梦溪"></textarea>
+        <label>红方全局已用英雄，逗号分隔</label>
+        <textarea id="camp2GlobalUsed" placeholder="例如 戈娅,小乔"></textarea>
+        <label>搜索英雄或标签</label>
+        <input id="heroSearch" placeholder="公孙离 / 中路 / 开团 / 射手" />
+        <div class="button-row">
+          <button id="refreshRec">刷新推荐</button>
+          <button id="undoBtn" class="secondary">撤销一步</button>
+        </div>
+        <button id="resetBtn" class="danger" style="width: 100%; margin-top: 10px">重置 BP</button>
+        <div id="status" class="status">正在加载...</div>
+        <hr style="border-color: var(--line); margin: 18px 0" />
+        <h2>可选英雄</h2>
+        <div id="heroList" class="hero-list"></div>
+      </section>
+
+      <section class="panel">
+        <h2>BP 棋盘</h2>
+        <div class="current-step" id="currentStep">等待初始化</div>
+        <div class="bp-board">
+          <div class="side blue">
+            <h3>蓝方 Camp 1</h3>
+            <label>Pick</label>
+            <div id="camp1Picks" class="slot-grid"></div>
+            <label>Ban</label>
+            <div id="camp1Bans" class="slot-grid"></div>
+          </div>
+          <div class="side red">
+            <h3>红方 Camp 2</h3>
+            <label>Pick</label>
+            <div id="camp2Picks" class="slot-grid"></div>
+            <label>Ban</label>
+            <div id="camp2Bans" class="slot-grid"></div>
+          </div>
+        </div>
+        <div id="timeline" class="timeline"></div>
+      </section>
+
+      <section class="panel">
+        <h2>模型推荐</h2>
+        <div id="recommendations" class="recommendation"></div>
+        <hr style="border-color: var(--line); margin: 18px 0" />
+        <h2>云端模型复盘</h2>
+        <label>提问</label>
+        <textarea id="cloudQuestion">请分析当前 BP 局面，下一手怎么选？这个阵容的缺陷和游戏思路是什么？</textarea>
+        <div class="button-row">
+          <button id="localAsk" class="secondary">本地标签分析</button>
+          <button id="cloudAsk">DeepSeek 提问</button>
+        </div>
+        <button id="cloudRealtime" style="width: 100%; margin-top: 10px">一键实时分析当前 BP</button>
+        <div id="cloudAnswer" class="analysis-box">等待分析。</div>
+      </section>
+    </main>
+
+    <script>
+      const app = {
+        heroes: [],
+        schedule: [],
+        modes: [],
+        actions: [],
+        recommendations: [],
+        legalHeroes: [],
+      };
+
+      const laneOrder = ["对抗路", "打野", "中路", "发育路", "游走"];
+
+      const $ = (id) => document.getElementById(id);
+
+      function setStatus(message) {
+        $("status").textContent = message;
+      }
+
+      function usedHeroes() {
+        return new Set(app.actions.map((action) => action.hero));
+      }
+
+      function currentSlot() {
+        return app.schedule[app.actions.length] || null;
+      }
+
+      function splitActions() {
+        const result = {
+          camp1Picks: [],
+          camp2Picks: [],
+          camp1Bans: [],
+          camp2Bans: [],
+        };
+        app.actions.forEach((action, index) => {
+          const slot = app.schedule[index];
+          if (!slot) return;
+          if (slot.action_type === "ban" && slot.camp === 1) result.camp1Bans.push(action.hero);
+          if (slot.action_type === "ban" && slot.camp === 2) result.camp2Bans.push(action.hero);
+          if (slot.action_type === "pick" && slot.camp === 1) result.camp1Picks.push(action.hero);
+          if (slot.action_type === "pick" && slot.camp === 2) result.camp2Picks.push(action.hero);
+        });
+        return result;
+      }
+
+      async function api(path, options = {}) {
+        const response = await fetch(path, {
+          headers: { "Content-Type": "application/json" },
+          ...options,
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || `API 请求失败：${response.status}`);
+        }
+        return payload;
+      }
+
+      function payloadBase() {
+        return {
+          actions: app.actions,
+          camp1_team: $("camp1Team").value.trim(),
+          camp2_team: $("camp2Team").value.trim(),
+          mode: $("matchMode").value || "single",
+          game_index: Number($("gameIndex").value || 1),
+          camp1_global_used: $("camp1GlobalUsed").value,
+          camp2_global_used: $("camp2GlobalUsed").value,
+        };
+      }
+
+      async function loadConfig() {
+        const payload = await api("/api/bp/config");
+        app.heroes = payload.heroes || [];
+        app.modes = payload.modes || [];
+        app.schedule = payload.schedule || [];
+        renderModes();
+        render();
+        await refreshRecommendations();
+      }
+
+      function renderModes() {
+        const modeNode = $("matchMode");
+        modeNode.innerHTML = "";
+        for (const mode of app.modes) {
+          const option = document.createElement("option");
+          option.value = mode.mode;
+          option.textContent = mode.label;
+          option.dataset.maxGames = mode.max_games;
+          modeNode.appendChild(option);
+        }
+        modeNode.value = "bo7_peak";
+        renderGameOptions();
+      }
+
+      function renderGameOptions() {
+        const selected = app.modes.find((mode) => mode.mode === $("matchMode").value);
+        const maxGames = selected?.max_games || 1;
+        const node = $("gameIndex");
+        const current = Number(node.value || 1);
+        node.innerHTML = "";
+        for (let index = 1; index <= maxGames; index++) {
+          const option = document.createElement("option");
+          option.value = index;
+          option.textContent = `第 ${index} 局`;
+          node.appendChild(option);
+        }
+        node.value = Math.min(current, maxGames);
+      }
+
+      async function refreshRecommendations() {
+        if (app.actions.length >= app.schedule.length) {
+          app.recommendations = [];
+          render();
+          return;
+        }
+        setStatus("正在请求本地 BP 模型推荐...");
+        const payload = await api("/api/bp/recommend", {
+          method: "POST",
+          body: JSON.stringify({ ...payloadBase(), top_k: 8, search_depth: 2 }),
+        });
+        app.schedule = payload.schedule || app.schedule;
+        app.legalHeroes = payload.legal_heroes || [];
+        app.recommendations = payload.recommendations || [];
+        render();
+        setStatus("推荐已更新。");
+      }
+
+      function chooseHero(hero) {
+        const slot = currentSlot();
+        if (!slot) {
+          setStatus("BP 已完成。");
+          return;
+        }
+        if (!isHeroAvailable(hero)) {
+          setStatus(`${hero} 当前不可选，可能已被使用或被全局 BP 锁定。`);
+          return;
+        }
+        app.actions.push({ hero });
+        render();
+        refreshRecommendations().catch((error) => setStatus(error.message));
+      }
+
+      function renderSlots(id, values, size = 5) {
+        const node = $(id);
+        node.innerHTML = "";
+        for (let i = 0; i < size; i++) {
+          const div = document.createElement("div");
+          div.className = `slot ${values[i] ? "filled" : ""}`;
+          div.textContent = values[i] || "-";
+          node.appendChild(div);
+        }
+      }
+
+      function renderBoard() {
+        const split = splitActions();
+        renderSlots("camp1Picks", split.camp1Picks, 5);
+        renderSlots("camp2Picks", split.camp2Picks, 5);
+        renderSlots("camp1Bans", split.camp1Bans, 5);
+        renderSlots("camp2Bans", split.camp2Bans, 5);
+      }
+
+      function renderCurrentStep() {
+        const slot = currentSlot();
+        if (!slot) {
+          $("currentStep").innerHTML = "<strong>BP 已完成</strong><br />可以调用 DeepSeek 复盘整套阵容。";
+          return;
+        }
+        const side = slot.camp === 1 ? "蓝方" : "红方";
+        const action = slot.action_type === "ban" ? "Ban" : "Pick";
+        const modeText = $("matchMode").selectedOptions[0]?.textContent || "单局";
+        $("currentStep").innerHTML = `${modeText} / 第 ${$("gameIndex").value} 局<br />第 <strong>${slot.order}</strong> 手：<strong>${side}</strong> ${action}`;
+      }
+
+      function renderTimeline() {
+        const node = $("timeline");
+        node.innerHTML = "";
+        app.schedule.forEach((slot, index) => {
+          const div = document.createElement("div");
+          div.className = `step ${index < app.actions.length ? "done" : ""} ${index === app.actions.length ? "active" : ""}`;
+          const side = slot.camp === 1 ? "蓝" : "红";
+          const action = slot.action_type === "ban" ? "B" : "P";
+          div.textContent = app.actions[index]?.hero || `${index}:${side}${action}`;
+          node.appendChild(div);
+        });
+      }
+
+      function renderHeroes() {
+        const keyword = $("heroSearch").value.trim();
+        const node = $("heroList");
+        node.innerHTML = "";
+        const filtered = app.heroes
+          .filter((hero) => {
+            if (!keyword) return true;
+            const text = [hero.hero, hero.lane, ...(hero.lanes || []), hero.role, hero.damage_type, ...(hero.tags || [])].join(" ");
+            return text.includes(keyword);
+          });
+        const allLanes = filtered.flatMap((hero) => hero.lanes || [hero.lane]);
+        const lanes = [...laneOrder, ...new Set(allLanes.filter((lane) => !laneOrder.includes(lane)))];
+        for (const lane of lanes) {
+          const heroes = filtered.filter((hero) => (hero.lanes || [hero.lane]).includes(lane));
+          if (!heroes.length) continue;
+          const section = document.createElement("section");
+          section.className = "lane-section";
+          const title = document.createElement("div");
+          title.className = "lane-title";
+          title.innerHTML = `<span>${lane}</span><span>${heroes.length}</span>`;
+          const grid = document.createElement("div");
+          grid.className = "lane-heroes";
+          heroes.forEach((hero) => {
+            const button = document.createElement("button");
+            button.className = `hero-card ${isHeroAvailable(hero.hero) ? "" : "disabled"}`;
+            button.disabled = !isHeroAvailable(hero.hero);
+            const lanesText = (hero.lanes || [hero.lane]).join("/");
+            button.innerHTML = `<b>${hero.hero}</b><div class="meta">${lanesText} · ${hero.role} · ${hero.damage_type}</div>`;
+            button.addEventListener("click", () => chooseHero(hero.hero));
+            grid.appendChild(button);
+          });
+          section.appendChild(title);
+          section.appendChild(grid);
+          node.appendChild(section);
+        }
+      }
+
+      function isHeroAvailable(hero) {
+        if (app.legalHeroes.length) return app.legalHeroes.includes(hero);
+        return !usedHeroes().has(hero);
+      }
+
+      function renderRecommendations() {
+        const node = $("recommendations");
+        node.innerHTML = "";
+        if (!app.recommendations.length) {
+          node.textContent = app.actions.length >= app.schedule.length ? "BP 已完成。" : "暂无推荐。";
+          return;
+        }
+        app.recommendations.forEach((rec, index) => {
+          const div = document.createElement("div");
+          div.className = "rec";
+          div.innerHTML = `
+            <div>
+              <b>${index + 1}. ${rec.hero}</b><br />
+              <small>policy ${rec.policy_score} / value ${rec.value_score}</small>
+            </div>
+            <button class="secondary" data-hero="${rec.hero}">选择</button>
+          `;
+          div.querySelector("button").addEventListener("click", () => chooseHero(rec.hero));
+          node.appendChild(div);
+        });
+      }
+
+      function render() {
+        renderCurrentStep();
+        renderBoard();
+        renderTimeline();
+        renderHeroes();
+        renderRecommendations();
+      }
+
+      async function localAsk() {
+        const split = splitActions();
+        const slot = currentSlot();
+        const own = slot?.camp === 2 ? split.camp2Picks : split.camp1Picks;
+        const enemy = slot?.camp === 2 ? split.camp1Picks : split.camp2Picks;
+        const payload = await api("/api/ask", {
+          method: "POST",
+          body: JSON.stringify({
+            heroes: own,
+            enemy_heroes: enemy,
+            question: $("cloudQuestion").value,
+          }),
+        });
+        $("cloudAnswer").textContent = payload.answer;
+      }
+
+      async function cloudAsk(questionOverride = "") {
+        setStatus("正在调用 DeepSeek。若未配置 DEEPSEEK_API_KEY，会返回提示词和本地分析。");
+        const split = splitActions();
+        const slot = currentSlot();
+        const own = slot?.camp === 2 ? split.camp2Picks : split.camp1Picks;
+        const enemy = slot?.camp === 2 ? split.camp1Picks : split.camp2Picks;
+        const payload = await api("/api/deepseek", {
+          method: "POST",
+          body: JSON.stringify({
+            ...payloadBase(),
+            heroes: own,
+            enemy_heroes: enemy,
+            question: questionOverride || $("cloudQuestion").value,
+          }),
+        });
+        $("cloudAnswer").textContent = payload.answer || payload.local_answer?.answer || payload.error || "无返回";
+        setStatus(payload.error ? `DeepSeek 未完成：${payload.error}` : "DeepSeek 分析完成。");
+      }
+
+      $("heroSearch").addEventListener("input", renderHeroes);
+      $("matchMode").addEventListener("change", () => {
+        renderGameOptions();
+        app.actions = [];
+        app.legalHeroes = [];
+        refreshRecommendations().catch((error) => setStatus(error.message));
+      });
+      $("gameIndex").addEventListener("change", () => {
+        app.actions = [];
+        app.legalHeroes = [];
+        refreshRecommendations().catch((error) => setStatus(error.message));
+      });
+      $("camp1GlobalUsed").addEventListener("change", () => refreshRecommendations().catch((error) => setStatus(error.message)));
+      $("camp2GlobalUsed").addEventListener("change", () => refreshRecommendations().catch((error) => setStatus(error.message)));
+      $("refreshRec").addEventListener("click", () => refreshRecommendations().catch((error) => setStatus(error.message)));
+      $("undoBtn").addEventListener("click", () => {
+        app.actions.pop();
+        refreshRecommendations().catch((error) => setStatus(error.message));
+      });
+      $("resetBtn").addEventListener("click", () => {
+        app.actions = [];
+        $("cloudAnswer").textContent = "等待分析。";
+        refreshRecommendations().catch((error) => setStatus(error.message));
+      });
+      $("localAsk").addEventListener("click", () => localAsk().catch((error) => setStatus(error.message)));
+      $("cloudAsk").addEventListener("click", () => cloudAsk().catch((error) => setStatus(error.message)));
+      $("cloudRealtime").addEventListener("click", () => {
+        const slot = currentSlot();
+        const action = slot?.action_type === "ban" ? "ban" : "pick";
+        const side = slot?.camp === 1 ? "蓝方" : "红方";
+        const question = `请实时分析当前 BP。现在轮到${side}${action}，请结合本地模型推荐，直接给出下一手建议、我方阵容优劣、敌方阵容威胁和进入游戏后的打法。`;
+        cloudAsk(question).catch((error) => setStatus(error.message));
+      });
+
+      loadConfig().catch((error) => setStatus(error.message));
+    </script>
+  </body>
+</html>

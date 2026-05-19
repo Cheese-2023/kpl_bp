@@ -26,8 +26,10 @@ class BPAgent:
         top_k: int = 5,
         policy_width: int = 12,
         search_depth: int = 2,
+        legal_heroes: Iterable[str] | None = None,
     ) -> list[dict[str, float | str]]:
-        candidates = self.policy_model.predict(state, top_k=policy_width, legal_heroes=self.heroes)
+        hero_pool = sorted(set(legal_heroes if legal_heroes is not None else self.heroes))
+        candidates = self.policy_model.predict(state, top_k=policy_width, legal_heroes=hero_pool)
         scored = []
         for hero, policy_score in candidates:
             next_state = self.apply_action(state, hero)
@@ -36,6 +38,7 @@ class BPAgent:
                 perspective_camp=state.camp,
                 depth=max(0, search_depth - 1),
                 width=min(6, policy_width),
+                legal_heroes=hero_pool,
             )
             combined = 0.65 * policy_score + 0.35 * search_score
             scored.append(
@@ -77,6 +80,8 @@ class BPAgent:
             banned=banned,
             camp1_picks=camp1_picks,
             camp2_picks=camp2_picks,
+            camp1_team=state.camp1_team,
+            camp2_team=state.camp2_team,
         )
 
     def _next_slot(self, order: int) -> dict[str, int | str] | None:
@@ -100,16 +105,33 @@ class BPAgent:
             include_strength=False,
         )
 
-    def _search(self, state: BPState, perspective_camp: int, depth: int, width: int) -> float:
+    def _search(
+        self,
+        state: BPState,
+        perspective_camp: int,
+        depth: int,
+        width: int,
+        legal_heroes: Iterable[str] | None = None,
+    ) -> float:
         if depth <= 0 or state.order >= len(self.schedule):
             return self._state_value(state, perspective_camp)
 
-        candidates = self.policy_model.predict(state, top_k=width, legal_heroes=self.heroes)
+        candidates = self.policy_model.predict(
+            state,
+            top_k=width,
+            legal_heroes=legal_heroes if legal_heroes is not None else self.heroes,
+        )
         if not candidates:
             return self._state_value(state, perspective_camp)
 
         child_scores = [
-            self._search(self.apply_action(state, hero), perspective_camp, depth - 1, width)
+            self._search(
+                self.apply_action(state, hero),
+                perspective_camp,
+                depth - 1,
+                width,
+                legal_heroes,
+            )
             for hero, _ in candidates
         ]
         if state.camp == perspective_camp:
