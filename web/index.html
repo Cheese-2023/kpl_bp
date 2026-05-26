@@ -56,11 +56,67 @@
         line-height: 1.7;
       }
 
+      .nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 20px;
+      }
+
+      .nav button {
+        border: 1px solid rgba(244, 200, 106, 0.26);
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--text);
+      }
+
+      .nav button.active {
+        background: linear-gradient(135deg, var(--gold), #ff9d5c);
+        color: #16100a;
+      }
+
+      .hero-dashboard {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+        padding: 0 min(5vw, 64px) 18px;
+      }
+
+      .metric {
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.045);
+        padding: 16px;
+      }
+
+      .metric b {
+        display: block;
+        color: var(--gold);
+        font-size: 24px;
+        margin-bottom: 4px;
+      }
+
+      .metric span {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
       main {
         display: grid;
         grid-template-columns: 360px 1fr 390px;
         gap: 18px;
         padding: 0 min(5vw, 64px) 42px;
+      }
+
+      .page {
+        display: none;
+      }
+
+      .page.active {
+        display: grid;
+      }
+
+      .subpage {
+        grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
       }
 
       .panel {
@@ -187,6 +243,16 @@
         padding: 6px;
       }
 
+      .slot .slot-hero {
+        font-weight: 800;
+      }
+
+      .slot .slot-lanes {
+        color: var(--gold);
+        font-size: 11px;
+        margin-top: 3px;
+      }
+
       .slot.filled {
         border-style: solid;
         color: var(--text);
@@ -282,6 +348,40 @@
         margin-top: 4px;
       }
 
+      .mini-chip {
+        display: inline-block;
+        border: 1px solid rgba(117, 170, 255, 0.35);
+        border-radius: 999px;
+        background: rgba(117, 170, 255, 0.12);
+        color: var(--text);
+        font-size: 12px;
+        margin: 4px 6px 0 0;
+        padding: 4px 9px;
+      }
+
+      .modal {
+        position: fixed;
+        inset: 0;
+        display: none;
+        background: rgba(3, 6, 13, 0.72);
+        z-index: 1000;
+      }
+
+      .modal.open {
+        display: block;
+      }
+
+      .modal-card {
+        width: min(980px, 92vw);
+        max-height: 82vh;
+        overflow: auto;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: linear-gradient(145deg, rgba(24, 35, 58, 0.98), rgba(15, 23, 40, 0.98));
+        margin: 6vh auto;
+        padding: 16px;
+      }
+
       .recommendation {
         display: grid;
         gap: 9px;
@@ -332,6 +432,20 @@
         main {
           grid-template-columns: 1fr;
         }
+
+        .hero-dashboard {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .subpage {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 680px) {
+        .hero-dashboard {
+          grid-template-columns: 1fr;
+        }
       }
     </style>
   </head>
@@ -340,11 +454,23 @@
       <div class="eyebrow">KPL BP SIMULATOR</div>
       <h1>模拟完整 BP，每一步让模型给你候选。</h1>
       <p class="subtitle">
-        按职业 BP 顺序点击英雄完成 ban/pick。后端会调用本地训练好的 BP Agent 返回当前步骤推荐，也可以调用 DeepSeek 对当前 BP 或阵容做云端复盘。
+        按职业 BP 顺序点击英雄完成 ban/pick。后端会调用本地训练好的 BP Agent 返回当前步骤推荐，也可以调用云端 AI 对当前 BP 或阵容做复盘。
       </p>
+      <nav class="nav">
+        <button class="active" data-page="bpPage">BP 模拟器</button>
+        <button data-page="metaPage">英雄资料库</button>
+        <button data-page="analysisPage">阵容分析与云端 AI</button>
+      </nav>
     </header>
 
-    <main>
+    <section class="hero-dashboard">
+      <div class="metric"><b id="metricHeroes">-</b><span>已加载英雄</span></div>
+      <div class="metric"><b id="metricMode">-</b><span>当前赛制策略</span></div>
+      <div class="metric"><b id="metricLegal">-</b><span>当前可选英雄</span></div>
+      <div class="metric"><b id="metricStep">-</b><span>BP 进度</span></div>
+    </section>
+
+    <main id="bpPage" class="page active">
       <section class="panel">
         <h2>模拟设置</h2>
         <label>蓝方队伍</label>
@@ -357,10 +483,18 @@
           <select id="gameIndex"></select>
         </div>
         <div class="hint">全局 BP 模式下，已用英雄会在后续局自动从本方 pick 候选里过滤；巅峰对决自动切换为无 ban 的 10 手 pick。</div>
-        <label>蓝方全局已用英雄，逗号分隔</label>
-        <textarea id="camp1GlobalUsed" placeholder="例如 公孙离,沈梦溪"></textarea>
-        <label>红方全局已用英雄，逗号分隔</label>
-        <textarea id="camp2GlobalUsed" placeholder="例如 戈娅,小乔"></textarea>
+        <label>蓝方全局已用英雄（点击选择）</label>
+        <div class="button-row">
+          <button id="editCamp1Global" class="secondary">编辑蓝方已用</button>
+          <button id="clearCamp1Global" class="danger">清空蓝方</button>
+        </div>
+        <div id="camp1GlobalView" class="hero-list" style="max-height: 110px; margin-top: 8px"></div>
+        <label>红方全局已用英雄（点击选择）</label>
+        <div class="button-row">
+          <button id="editCamp2Global" class="secondary">编辑红方已用</button>
+          <button id="clearCamp2Global" class="danger">清空红方</button>
+        </div>
+        <div id="camp2GlobalView" class="hero-list" style="max-height: 110px; margin-top: 8px"></div>
         <label>搜索英雄或标签</label>
         <input id="heroSearch" placeholder="公孙离 / 中路 / 开团 / 射手" />
         <div class="button-row">
@@ -400,17 +534,71 @@
         <h2>模型推荐</h2>
         <div id="recommendations" class="recommendation"></div>
         <hr style="border-color: var(--line); margin: 18px 0" />
-        <h2>云端模型复盘</h2>
+        <h2>云端 AI 复盘</h2>
         <label>提问</label>
         <textarea id="cloudQuestion">请分析当前 BP 局面，下一手怎么选？这个阵容的缺陷和游戏思路是什么？</textarea>
         <div class="button-row">
           <button id="localAsk" class="secondary">本地标签分析</button>
-          <button id="cloudAsk">DeepSeek 提问</button>
+          <button id="cloudAsk">云端 AI 提问</button>
         </div>
         <button id="cloudRealtime" style="width: 100%; margin-top: 10px">一键实时分析当前 BP</button>
         <div id="cloudAnswer" class="analysis-box">等待分析。</div>
       </section>
     </main>
+
+    <main id="metaPage" class="page subpage">
+      <section class="panel">
+        <h2>英雄资料库</h2>
+        <p class="hint">按位置分类展示英雄元数据，包含分路、职业定位、伤害类型和标签。这里用于检查模型和云端 AI 使用的英雄基础信息。</p>
+        <label>搜索英雄 / 分路 / 标签</label>
+        <input id="metaSearch" placeholder="例如 开团 / 法伤 / 中路 / 公孙离" />
+        <div id="metaHeroList" class="hero-list" style="max-height: 68vh; margin-top: 14px"></div>
+      </section>
+      <section class="panel">
+        <h2>标签说明</h2>
+        <div id="tagCloud" class="analysis-box">等待加载。</div>
+      </section>
+    </main>
+
+    <main id="analysisPage" class="page subpage">
+      <section class="panel">
+        <h2>当前阵容快照</h2>
+        <p class="hint">这里会同步 BP 棋盘中的蓝红阵容。你也可以直接在 BP 页面落子后切换到这里做复盘。</p>
+        <div class="bp-board">
+          <div class="side blue">
+            <h3>蓝方已选</h3>
+            <div id="analysisCamp1" class="slot-grid"></div>
+          </div>
+          <div class="side red">
+            <h3>红方已选</h3>
+            <div id="analysisCamp2" class="slot-grid"></div>
+          </div>
+        </div>
+        <div class="button-row">
+          <button id="analysisLocal">本地阵容分析</button>
+          <button id="analysisCloud">云端 AI 深度分析</button>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>分析结果</h2>
+        <textarea id="analysisQuestion">请分析双方阵容优劣、下一手 BP 方向、进入游戏后的前中后期打法。</textarea>
+        <div id="analysisAnswer" class="analysis-box" style="margin-top: 12px">等待分析。</div>
+      </section>
+    </main>
+
+    <div id="globalModal" class="modal">
+      <div class="modal-card">
+        <h2 id="globalModalTitle">选择全局已用英雄</h2>
+        <div class="hint">点击英雄可加入或移除。完成后点击“应用选择”。</div>
+        <label>搜索</label>
+        <input id="globalModalSearch" placeholder="英雄名 / 分路 / 标签" />
+        <div id="globalModalList" class="hero-list" style="max-height: 56vh; margin-top: 12px"></div>
+        <div class="button-row" style="margin-top: 12px">
+          <button id="globalModalConfirm">应用选择</button>
+          <button id="globalModalClose" class="secondary">取消</button>
+        </div>
+      </div>
+    </div>
 
     <script>
       const app = {
@@ -420,6 +608,13 @@
         actions: [],
         recommendations: [],
         legalHeroes: [],
+        strategyProfile: null,
+        camp1GlobalUsed: [],
+        camp2GlobalUsed: [],
+        globalModalTarget: "",
+        globalModalDraft: [],
+        autoCloudAnalyze: true,
+        cloudRequestId: 0,
       };
 
       const laneOrder = ["对抗路", "打野", "中路", "发育路", "游走"];
@@ -475,8 +670,8 @@
           camp2_team: $("camp2Team").value.trim(),
           mode: $("matchMode").value || "single",
           game_index: Number($("gameIndex").value || 1),
-          camp1_global_used: $("camp1GlobalUsed").value,
-          camp2_global_used: $("camp2GlobalUsed").value,
+          camp1_global_used: app.camp1GlobalUsed,
+          camp2_global_used: app.camp2GlobalUsed,
         };
       }
 
@@ -533,6 +728,7 @@
         app.schedule = payload.schedule || app.schedule;
         app.legalHeroes = payload.legal_heroes || [];
         app.recommendations = payload.recommendations || [];
+        app.strategyProfile = payload.strategy_profile || null;
         render();
         setStatus("推荐已更新。");
       }
@@ -549,7 +745,9 @@
         }
         app.actions.push({ hero });
         render();
-        refreshRecommendations().catch((error) => setStatus(error.message));
+        refreshRecommendations()
+          .then(() => autoCloudAnalyzeAfterAction(hero))
+          .catch((error) => setStatus(error.message));
       }
 
       function renderSlots(id, values, size = 5) {
@@ -558,9 +756,19 @@
         for (let i = 0; i < size; i++) {
           const div = document.createElement("div");
           div.className = `slot ${values[i] ? "filled" : ""}`;
-          div.textContent = values[i] || "-";
+          if (values[i]) {
+            const meta = heroMeta(values[i]);
+            const lanes = meta ? (meta.lanes || [meta.lane]).join("/") : "";
+            div.innerHTML = `<div><div class="slot-hero">${values[i]}</div><div class="slot-lanes">${lanes}</div></div>`;
+          } else {
+            div.textContent = "-";
+          }
           node.appendChild(div);
         }
+      }
+
+      function heroMeta(heroName) {
+        return app.heroes.find((hero) => hero.hero === heroName);
       }
 
       function renderBoard() {
@@ -569,12 +777,15 @@
         renderSlots("camp2Picks", split.camp2Picks, 5);
         renderSlots("camp1Bans", split.camp1Bans, 5);
         renderSlots("camp2Bans", split.camp2Bans, 5);
+        renderSlots("analysisCamp1", split.camp1Picks, 5);
+        renderSlots("analysisCamp2", split.camp2Picks, 5);
+        renderGlobalUsedViews();
       }
 
       function renderCurrentStep() {
         const slot = currentSlot();
         if (!slot) {
-          $("currentStep").innerHTML = "<strong>BP 已完成</strong><br />可以调用 DeepSeek 复盘整套阵容。";
+          $("currentStep").innerHTML = "<strong>BP 已完成</strong><br />可以调用云端 AI 复盘整套阵容。";
           return;
         }
         const side = slot.camp === 1 ? "蓝方" : "红方";
@@ -633,6 +844,81 @@
         }
       }
 
+      function renderGlobalUsedViews() {
+        const render = (id, heroes) => {
+          const node = $(id);
+          node.innerHTML = "";
+          if (!heroes.length) {
+            node.innerHTML = '<span class="hint">暂无</span>';
+            return;
+          }
+          heroes.forEach((hero) => {
+            const span = document.createElement("span");
+            span.className = "mini-chip";
+            span.textContent = hero;
+            node.appendChild(span);
+          });
+        };
+        render("camp1GlobalView", app.camp1GlobalUsed);
+        render("camp2GlobalView", app.camp2GlobalUsed);
+      }
+
+      function openGlobalModal(target) {
+        app.globalModalTarget = target;
+        app.globalModalDraft = [...(target === "camp1" ? app.camp1GlobalUsed : app.camp2GlobalUsed)];
+        $("globalModalTitle").textContent = target === "camp1" ? "编辑蓝方全局已用英雄" : "编辑红方全局已用英雄";
+        $("globalModalSearch").value = "";
+        renderGlobalModalList();
+        $("globalModal").classList.add("open");
+      }
+
+      function closeGlobalModal() {
+        $("globalModal").classList.remove("open");
+      }
+
+      function renderGlobalModalList() {
+        const keyword = $("globalModalSearch").value.trim();
+        const selected = new Set(app.globalModalDraft);
+        const node = $("globalModalList");
+        node.innerHTML = "";
+        const filtered = app.heroes.filter((hero) => {
+          if (!keyword) return true;
+          const text = [hero.hero, hero.lane, ...(hero.lanes || []), hero.role, hero.damage_type, ...(hero.tags || [])].join(" ");
+          return text.includes(keyword);
+        });
+        const lanes = [...laneOrder, ...new Set(filtered.flatMap((hero) => hero.lanes || [hero.lane]).filter((lane) => !laneOrder.includes(lane)))];
+        for (const lane of lanes) {
+          const heroes = filtered.filter((hero) => (hero.lanes || [hero.lane]).includes(lane));
+          if (!heroes.length) continue;
+          const section = document.createElement("section");
+          section.className = "lane-section";
+          const title = document.createElement("div");
+          title.className = "lane-title";
+          title.innerHTML = `<span>${lane}</span><span>${heroes.length}</span>`;
+          const grid = document.createElement("div");
+          grid.className = "lane-heroes";
+          heroes.forEach((hero) => {
+            const button = document.createElement("button");
+            const isSelected = selected.has(hero.hero);
+            button.className = "hero-card";
+            button.innerHTML = `<b>${hero.hero}</b><div class="meta">${(hero.lanes || [hero.lane]).join("/")} · ${hero.role}</div>`;
+            button.style.borderColor = isSelected ? "var(--gold)" : "";
+            button.addEventListener("click", () => {
+              if (selected.has(hero.hero)) {
+                app.globalModalDraft = app.globalModalDraft.filter((name) => name !== hero.hero);
+              } else {
+                app.globalModalDraft.push(hero.hero);
+              }
+              renderGlobalModalList();
+            });
+            grid.appendChild(button);
+          });
+          section.appendChild(title);
+          section.appendChild(grid);
+          node.appendChild(section);
+        }
+      }
+
       function isHeroAvailable(hero) {
         if (app.legalHeroes.length) return app.legalHeroes.includes(hero);
         return !usedHeroes().has(hero);
@@ -641,8 +927,16 @@
       function renderRecommendations() {
         const node = $("recommendations");
         node.innerHTML = "";
+        if (app.strategyProfile) {
+          const strategy = document.createElement("div");
+          strategy.className = "current-step";
+          strategy.innerHTML = `<strong>${app.strategyProfile.description}</strong><br /><span class="hint">资源保留强度：${app.strategyProfile.reserve_strength ?? 0}</span>`;
+          node.appendChild(strategy);
+        }
         if (!app.recommendations.length) {
-          node.textContent = app.actions.length >= app.schedule.length ? "BP 已完成。" : "暂无推荐。";
+          const empty = document.createElement("div");
+          empty.textContent = app.actions.length >= app.schedule.length ? "BP 已完成。" : "暂无推荐。";
+          node.appendChild(empty);
           return;
         }
         app.recommendations.forEach((rec, index) => {
@@ -660,12 +954,56 @@
         });
       }
 
+      function renderDashboard() {
+        $("metricHeroes").textContent = app.heroes.length;
+        $("metricMode").textContent = $("matchMode").selectedOptions[0]?.textContent?.replace(" 全局 BP", "") || "-";
+        $("metricLegal").textContent = app.legalHeroes.length || app.heroes.length || "-";
+        $("metricStep").textContent = `${app.actions.length}/${app.schedule.length || 0}`;
+      }
+
+      function renderMetaPage() {
+        const keyword = $("metaSearch").value.trim();
+        const node = $("metaHeroList");
+        node.innerHTML = "";
+        const filtered = app.heroes.filter((hero) => {
+          if (!keyword) return true;
+          const text = [hero.hero, hero.lane, ...(hero.lanes || []), hero.role, hero.damage_type, ...(hero.tags || [])].join(" ");
+          return text.includes(keyword);
+        });
+        const lanes = [...laneOrder, ...new Set(filtered.flatMap((hero) => hero.lanes || [hero.lane]).filter((lane) => !laneOrder.includes(lane)))];
+        for (const lane of lanes) {
+          const heroes = filtered.filter((hero) => (hero.lanes || [hero.lane]).includes(lane));
+          if (!heroes.length) continue;
+          const section = document.createElement("section");
+          section.className = "lane-section";
+          const title = document.createElement("div");
+          title.className = "lane-title";
+          title.innerHTML = `<span>${lane}</span><span>${heroes.length}</span>`;
+          const grid = document.createElement("div");
+          grid.className = "lane-heroes";
+          heroes.forEach((hero) => {
+            const card = document.createElement("div");
+            card.className = "hero-card";
+            const tags = (hero.tags || []).slice(0, 4).map((tag) => `<span class="mini-chip">${tag}</span>`).join("");
+            card.innerHTML = `<b>${hero.hero}</b><div class="meta">${(hero.lanes || [hero.lane]).join("/")} · ${hero.role} · ${hero.damage_type}</div><div>${tags}</div>`;
+            grid.appendChild(card);
+          });
+          section.appendChild(title);
+          section.appendChild(grid);
+          node.appendChild(section);
+        }
+        const tags = [...new Set(app.heroes.flatMap((hero) => hero.tags || []))].sort();
+        $("tagCloud").innerHTML = tags.map((tag) => `<span class="mini-chip">${tag}</span>`).join("") || "暂无标签。";
+      }
+
       function render() {
         renderCurrentStep();
         renderBoard();
         renderTimeline();
         renderHeroes();
         renderRecommendations();
+        renderDashboard();
+        renderMetaPage();
       }
 
       async function localAsk() {
@@ -682,15 +1020,20 @@
           }),
         });
         $("cloudAnswer").textContent = payload.answer;
+        $("analysisAnswer").textContent = payload.answer;
       }
 
-      async function cloudAsk(questionOverride = "") {
-        setStatus("正在调用 DeepSeek。若未配置 DEEPSEEK_API_KEY，会返回提示词和本地分析。");
+      async function cloudAsk(questionOverride = "", options = {}) {
+        const requestId = ++app.cloudRequestId;
+        const silent = Boolean(options.silent);
+        if (!silent) {
+          setStatus("正在调用云端 AI。若未配置 CLOUD_AI_API_KEY，会返回提示词和本地分析。");
+        }
         const split = splitActions();
         const slot = currentSlot();
         const own = slot?.camp === 2 ? split.camp2Picks : split.camp1Picks;
         const enemy = slot?.camp === 2 ? split.camp1Picks : split.camp2Picks;
-        const payload = await api("/api/deepseek", {
+        const payload = await api("/api/cloud-ai", {
           method: "POST",
           body: JSON.stringify({
             ...payloadBase(),
@@ -699,11 +1042,37 @@
             question: questionOverride || $("cloudQuestion").value,
           }),
         });
+        if (requestId !== app.cloudRequestId) return;
         $("cloudAnswer").textContent = payload.answer || payload.local_answer?.answer || payload.error || "无返回";
-        setStatus(payload.error ? `DeepSeek 未完成：${payload.error}` : "DeepSeek 分析完成。");
+        $("analysisAnswer").textContent = $("cloudAnswer").textContent;
+        if (!silent) {
+          setStatus(payload.error ? `云端 AI 未完成：${payload.error}` : "云端 AI 分析完成。");
+        }
+        return payload;
+      }
+
+      async function autoCloudAnalyzeAfterAction(hero) {
+        if (!app.autoCloudAnalyze) return;
+        const slot = currentSlot();
+        const action = slot?.action_type === "ban" ? "ban" : "pick";
+        const side = slot?.camp === 1 ? "蓝方" : "红方";
+        const question = `刚刚完成了一手 ${hero}。请自动复盘当前 BP：分别说明蓝方和红方阵容优劣、英雄摇摆分路空间、下一手轮到${side}${action}时应优先考虑什么，并结合本地推荐给出候选。`;
+        setStatus("已落子，正在自动调用云端 AI 分析...");
+        const payload = await cloudAsk(question, { silent: true });
+        setStatus(payload?.error ? `云端 AI 自动分析未完成：${payload.error}` : "已自动完成云端 AI 分析。");
       }
 
       $("heroSearch").addEventListener("input", renderHeroes);
+      $("metaSearch").addEventListener("input", renderMetaPage);
+      document.querySelectorAll(".nav button").forEach((button) => {
+        button.addEventListener("click", () => {
+          document.querySelectorAll(".nav button").forEach((item) => item.classList.remove("active"));
+          document.querySelectorAll(".page").forEach((item) => item.classList.remove("active"));
+          button.classList.add("active");
+          $(button.dataset.page).classList.add("active");
+          render();
+        });
+      });
       $("matchMode").addEventListener("change", () => {
         renderGameOptions();
         app.actions = [];
@@ -715,8 +1084,27 @@
         app.legalHeroes = [];
         refreshRecommendations().catch((error) => setStatus(error.message));
       });
-      $("camp1GlobalUsed").addEventListener("change", () => refreshRecommendations().catch((error) => setStatus(error.message)));
-      $("camp2GlobalUsed").addEventListener("change", () => refreshRecommendations().catch((error) => setStatus(error.message)));
+      $("editCamp1Global").addEventListener("click", () => openGlobalModal("camp1"));
+      $("editCamp2Global").addEventListener("click", () => openGlobalModal("camp2"));
+      $("clearCamp1Global").addEventListener("click", () => {
+        app.camp1GlobalUsed = [];
+        render();
+        refreshRecommendations().catch((error) => setStatus(error.message));
+      });
+      $("clearCamp2Global").addEventListener("click", () => {
+        app.camp2GlobalUsed = [];
+        render();
+        refreshRecommendations().catch((error) => setStatus(error.message));
+      });
+      $("globalModalSearch").addEventListener("input", renderGlobalModalList);
+      $("globalModalClose").addEventListener("click", closeGlobalModal);
+      $("globalModalConfirm").addEventListener("click", () => {
+        if (app.globalModalTarget === "camp1") app.camp1GlobalUsed = [...app.globalModalDraft];
+        if (app.globalModalTarget === "camp2") app.camp2GlobalUsed = [...app.globalModalDraft];
+        closeGlobalModal();
+        render();
+        refreshRecommendations().catch((error) => setStatus(error.message));
+      });
       $("refreshRec").addEventListener("click", () => refreshRecommendations().catch((error) => setStatus(error.message)));
       $("undoBtn").addEventListener("click", () => {
         app.actions.pop();
@@ -735,6 +1123,14 @@
         const side = slot?.camp === 1 ? "蓝方" : "红方";
         const question = `请实时分析当前 BP。现在轮到${side}${action}，请结合本地模型推荐，直接给出下一手建议、我方阵容优劣、敌方阵容威胁和进入游戏后的打法。`;
         cloudAsk(question).catch((error) => setStatus(error.message));
+      });
+      $("analysisLocal").addEventListener("click", () => {
+        $("cloudQuestion").value = $("analysisQuestion").value;
+        localAsk().catch((error) => setStatus(error.message));
+      });
+      $("analysisCloud").addEventListener("click", () => {
+        $("cloudQuestion").value = $("analysisQuestion").value;
+        cloudAsk().catch((error) => setStatus(error.message));
       });
 
       loadConfig().catch((error) => setStatus(error.message));

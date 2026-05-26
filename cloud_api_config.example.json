@@ -1,0 +1,5 @@
+{
+  "base_url": "https://api.moark.com/v1",
+  "model": "Qwen3.6-Max",
+  "api_key": "不要提交真实 key，建议使用环境变量 CLOUD_AI_API_KEY"
+}

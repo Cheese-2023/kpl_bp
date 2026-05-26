@@ -110,7 +110,12 @@ def rerank_for_global_bp(
     # In global BP, very high priority heroes are a limited series resource.
     # Early games should still allow taking them, but not blindly exhaust them
     # when several lower-cost alternatives are close in model score.
-    reserve_factor = min(0.12, 0.035 * games_left_after_current)
+    if mode == "bo3_global":
+        reserve_factor = min(0.10, 0.045 * games_left_after_current)
+    elif mode in {"bo5_global", "bo5_peak"}:
+        reserve_factor = min(0.24, 0.065 * games_left_after_current)
+    else:
+        reserve_factor = min(0.34, 0.075 * games_left_after_current)
     adjusted: list[dict[str, object]] = []
     for item in recommendations:
         hero = str(item["hero"])
@@ -122,5 +127,37 @@ def rerank_for_global_bp(
         new_item["score"] = round(float(item.get("score", 0.0)) - penalty, 6)
         if penalty > 0.025:
             new_item["strategy_note"] = "全局 BP 早期局高优先级英雄，除非阵容刚需，否则可考虑保留。"
+        new_item["mode_policy"] = mode or "single"
         adjusted.append(new_item)
     return sorted(adjusted, key=lambda value: float(value["score"]), reverse=True)
+
+
+def strategy_profile_for_mode(mode: str | None, game_index: int) -> dict[str, object]:
+    match_mode = mode_from_name(mode)
+    if not match_mode.global_bp:
+        return {
+            "name": "single_game_best",
+            "description": "单局最优策略，优先当前局面最强推荐。",
+            "reserve_strength": 0.0,
+        }
+    games_left = max(0, match_mode.max_games - game_index)
+    if match_mode.peak_duel_game is not None and game_index == match_mode.peak_duel_game:
+        return {
+            "name": "peak_duel_stability",
+            "description": "巅峰对决策略，优先阵容完整、容错和熟练英雄。",
+            "reserve_strength": 0.0,
+        }
+    return {
+        "name": "global_bp_resource_management",
+        "description": "全局 BP 策略，会在早期局保留部分高优先级英雄资源。",
+        "reserve_strength": round(_reserve_strength(match_mode.mode, games_left), 4),
+        "games_left_after_current": games_left,
+    }
+
+
+def _reserve_strength(mode: str, games_left_after_current: int) -> float:
+    if mode == "bo3_global":
+        return min(0.10, 0.045 * games_left_after_current)
+    if mode in {"bo5_global", "bo5_peak"}:
+        return min(0.24, 0.065 * games_left_after_current)
+    return min(0.34, 0.075 * games_left_after_current)

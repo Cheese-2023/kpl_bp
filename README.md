@@ -128,7 +128,7 @@ Agent 输出 TopK 推荐：
 - `role`：英雄职业或功能定位，例如射手、法师、战士、坦克、辅助、刺客、法刺。
 - `damage_type`：主要伤害类型，例如物理、法术、真实伤害、混伤。
 - `tags`：阵容标签，用英文分号 `;` 分隔，例如开团、保护、消耗、后期、单带、切后排。
-- `alt_lanes`：可选副分路，用英文分号 `;` 分隔，例如 `打野;游走`。
+- `alt_lanes`：可选副分路，用英文分号 `;` 分隔，例如 `打野;游走`。若没有可留空。
 
 这张表会被 `/api/heroes`、`/api/analyze` 和 `/api/ask` 使用。后续如果想提升阵容分析质量，优先维护这张表。
 
@@ -263,7 +263,7 @@ python3 -m kplbp.recommend --state-json '{"order":4,"camp":1,"action_type":"pick
 - 前端：`web/index.html`，由后端静态托管
 - 本地模型：`models/kpl_bp_agent.json`
 - 英雄元数据：`hero_meta.csv`
-- 云端模型：DeepSeek，可选启用
+- 云端 AI：OpenAI 兼容接口，可选启用，默认适配 Moark `Qwen3.6-Max`
 
 启动本地服务：
 
@@ -283,21 +283,23 @@ http://127.0.0.1:8000
 python3 -m kplbp.api --host 0.0.0.0 --port 8080
 ```
 
-### DeepSeek 配置
+### 云端 AI 配置
 
 不要把 API Key 写进代码、README 或提交到仓库。启动服务前在终端设置环境变量：
 
 ```bash
-export DEEPSEEK_API_KEY="你的 DeepSeek API Key"
+export CLOUD_AI_API_KEY="你的云端 API Key"
 python3 -m kplbp.api
 ```
 
-后端会读取 `DEEPSEEK_API_KEY`，通过 `/api/deepseek` 调用 DeepSeek。若没有设置环境变量，接口会返回本地标签分析和已经构造好的提示词，方便调试。
+后端会读取 `CLOUD_AI_API_KEY`，通过 `/api/cloud-ai` 调用云端 AI。若没有设置环境变量，接口会返回本地标签分析、完整 `prompt`、`messages` 和 `request_body`，方便调试每一次上传内容。
 
-可以指定 DeepSeek 模型名：
+默认配置等价于 OpenAI 兼容调用：
 
 ```bash
-python3 -m kplbp.api --deepseek-model deepseek-chat
+python3 -m kplbp.api \
+  --cloud-ai-base-url https://api.moark.com/v1 \
+  --cloud-ai-model Qwen3.6-Max
 ```
 
 ### BP 模拟器
@@ -306,12 +308,13 @@ python3 -m kplbp.api --deepseek-model deepseek-chat
 
 1. 输入蓝方和红方队伍名称。
 2. 选择赛制：单局、BO3 全局 BP、BO5 全局 BP、BO7 全局 BP、BO5/BO7 带最后一局巅峰对决。
-3. 选择当前第几局，并填写双方全局已用英雄池。
+3. 选择当前第几局，并在页面中点击选择双方全局已用英雄池（不再需要手动输入名字）。
 4. 按当前 BP 步骤点击英雄，完成 ban 或 pick。
 5. 每一步后端会调用本地 BP Agent 返回推荐候选。
 6. 可以点击推荐英雄快速落子。
 7. 可以撤销一步或重置 BP。
-8. 可以调用本地标签分析、DeepSeek 自定义提问，或一键实时分析当前 BP。
+8. 可以调用本地标签分析、云端 AI 自定义提问，或一键实时分析当前 BP。
+9. 每完成一次 ban/pick，前端会自动调用一次云端 AI 分析当前 BP。
 
 ### 赛制规则说明
 
@@ -329,6 +332,7 @@ python3 -m kplbp.api --deepseek-model deepseek-chat
 - pick 时过滤本方在前面局已经使用过的英雄。
 - ban 推荐会优先过滤敌方已经无法再 pick 的英雄，避免推荐低价值 ban。
 - 当前局已经 ban/pick 的英雄不会再次出现。
+- 页面中“全局已用英雄”支持可视化多选，可直接点击英雄加入/移除，不需要手打。
 
 巅峰对决当前实现为无 ban 的 10 手 pick 顺序，用于模拟最后一局快速阵容选择。由于历史训练数据主要来自普通 BP，巅峰对决推荐仍然复用本地策略模型和阵容价值模型，后续如果有专门的巅峰对决数据，可以单独训练该模式。
 
@@ -378,15 +382,15 @@ curl -X POST http://127.0.0.1:8000/api/ask \
 
 当前问答 API 是规则型分析器，不依赖外部大模型。它会查询 `hero_meta.csv`，根据英雄分路、职业、伤害类型和标签回答阵容缺陷、强点、游戏思路和对敌方阵容的应对。
 
-调用 DeepSeek 分析当前 BP：
+调用云端 AI 分析当前 BP：
 
 ```bash
-curl -X POST http://127.0.0.1:8000/api/deepseek \
+curl -X POST http://127.0.0.1:8000/api/cloud-ai \
   -H 'Content-Type: application/json' \
   -d '{"mode":"bo7_peak","game_index":2,"actions":[{"hero":"狄仁杰"},{"hero":"鲁班大师"},{"hero":"狂铁"},{"hero":"盾山"}],"heroes":["公孙离","沈梦溪","张飞"],"enemy_heroes":["戈娅","小乔","苏烈"],"question":"请分析当前 BP 下一手怎么选，以及这套阵容的游戏思路。"}'
 ```
 
-DeepSeek 的提示词会包含：
+云端 AI 的提示词会包含：
 
 - 用户问题
 - 当前 BP 状态
@@ -395,9 +399,15 @@ DeepSeek 的提示词会包含：
 - `docs/BP_EXPERIENCE.md` 中的 BP 经验知识库
 - 要求模型分别输出蓝方优势/短板、红方优势/短板、下一手建议、全局 BP 资源判断、双方前中后期思路和风险点
 
+接口返回中会包含完整上传内容：
+
+- `prompt`：最终用户提示词
+- `messages`：OpenAI 兼容 messages
+- `request_body`：最终发送给云端模型的请求体
+
 ### BP 经验知识库
 
-`docs/BP_EXPERIENCE.md` 用来给本地检索和 DeepSeek 分析提供背景知识，包含：
+`docs/BP_EXPERIENCE.md` 用来给本地检索和云端 AI 分析提供背景知识，包含：
 
 - BP 基本原则
 - 阵容结构检查

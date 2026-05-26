@@ -15,6 +15,7 @@ from .bp_rules import (
     modes_payload,
     rerank_for_global_bp,
     schedule_for_mode,
+    strategy_profile_for_mode,
 )
 from .data import load_hero_meta, load_json
 from .schema import BPState
@@ -28,7 +29,9 @@ class KPLBPHandler(SimpleHTTPRequestHandler):
     hero_meta_path = ROOT / "hero_meta.csv"
     model_path = ROOT / "models" / "kpl_bp_agent.json"
     bp_knowledge_path = ROOT / "docs" / "BP_EXPERIENCE.md"
-    deepseek_model = "deepseek-chat"
+    cloud_ai_base_url = "https://api.moark.com/v1"
+    cloud_ai_model = "Qwen3.6-Max"
+    cloud_config_path = ROOT / "cloud_api_config.json"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(WEB_ROOT), **kwargs)
@@ -59,6 +62,7 @@ class KPLBPHandler(SimpleHTTPRequestHandler):
             "/api/ask",
             "/api/bp/recommend",
             "/api/deepseek",
+            "/api/cloud-ai",
         }:
             self._send_json({"error": "unknown endpoint"}, status=404)
             return
@@ -76,7 +80,7 @@ class KPLBPHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/bp/recommend":
             self._send_json(self._bp_recommend_payload(payload))
             return
-        self._send_json(self._deepseek_payload(payload))
+        self._send_json(self._cloud_ai_payload(payload))
 
     def _heroes_payload(self) -> dict[str, object]:
         hero_meta = load_hero_meta(self.hero_meta_path)
@@ -119,9 +123,13 @@ class KPLBPHandler(SimpleHTTPRequestHandler):
         top_k = int(payload.get("top_k", 6) or 6)
         search_depth = int(payload.get("search_depth", 2) or 2)
         legal_heroes = self._legal_heroes(payload, state, agent)
+        mode = str(payload.get("mode", "single") or "single")
+        game_index = int(payload.get("game_index", 1) or 1)
+        candidate_width = max(top_k * 4, 24) if mode != "single" else max(top_k * 2, 12)
         recommendations = agent_for_mode.recommend(
             state,
-            top_k=top_k,
+            top_k=candidate_width,
+            policy_width=candidate_width,
             search_depth=search_depth,
             legal_heroes=legal_heroes,
         )
@@ -134,6 +142,7 @@ class KPLBPHandler(SimpleHTTPRequestHandler):
         return {
             "state": state.to_dict(),
             "schedule": schedule,
+            "strategy_profile": strategy_profile_for_mode(mode, game_index),
             "legal_heroes": legal_heroes,
             "recommendations": recommendations,
             "done": state.order >= len(schedule),
@@ -233,8 +242,26 @@ class KPLBPHandler(SimpleHTTPRequestHandler):
             split_hero_names(payload.get("camp2_global_used")),
         )
 
-    def _deepseek_payload(self, payload: dict[str, object]) -> dict[str, object]:
-        api_key = os.environ.get("DEEPSEEK_API_KEY")
+    def _global_used_for_deepseek(
+        self,
+        payload: dict[str, object],
+        side: str,
+    ) -> list[str]:
+        key = "camp1_global_used" if side == "camp1" else "camp2_global_used"
+        value = payload.get(key)
+        if isinstance(value, list):
+            return split_hero_names(value)
+        return split_hero_names(value)
+
+    def _cloud_ai_payload(self, payload: dict[str, object]) -> dict[str, object]:
+        cloud_config = self._cloud_ai_config()
+        api_key = (
+            os.environ.get("CLOUD_AI_API_KEY")
+            or os.environ.get("MOARK_API_KEY")
+            or os.environ.get("OPENAI_API_KEY")
+            or os.environ.get("DEEPSEEK_API_KEY")
+            or str(cloud_config.get("api_key") or "")
+        )
         agent = self._load_agent()
         state = self._state_from_payload(payload, agent)
         schedule = self._schedule_from_payload(payload, agent)
@@ -248,9 +275,12 @@ class KPLBPHandler(SimpleHTTPRequestHandler):
             enemy_heroes,
             hero_meta,
         )
+        mode = str(payload.get("mode", "single") or "single")
+        candidate_width = 24 if mode != "single" else 12
         recommendations = agent_for_mode.recommend(
             state,
-            top_k=6,
+            top_k=candidate_width,
+            policy_width=candidate_width,
             search_depth=2,
             legal_heroes=self._legal_heroes(payload, state, agent),
         )
@@ -260,32 +290,23 @@ class KPLBPHandler(SimpleHTTPRequestHandler):
             state,
             agent,
         )[:6]
-        prompt = self._deepseek_prompt(payload, state, local_answer, recommendations)
+        prompt = self._cloud_ai_prompt(payload, state, local_answer, recommendations)
+        messages = self._cloud_ai_messages(prompt)
+        request_body = self._cloud_ai_request_body(messages)
         if not api_key:
             return {
-                "error": "DEEPSEEK_API_KEY is not set",
+                "error": "云端 API Key 未配置。请设置 CLOUD_AI_API_KEY，或创建 cloud_api_config.json。",
                 "prompt": prompt,
+                "messages": messages,
+                "request_body": request_body,
                 "local_answer": local_answer,
                 "recommendations": recommendations,
             }
 
-        body = json.dumps(
-            {
-                "model": self.deepseek_model,
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": "你是 KPL 职业赛 BP 教练。只基于用户给出的 BP 状态、英雄标签、本地模型推荐、阵容分析和 BP 经验知识库回答。回答必须具体，必须分别讨论蓝方和红方，不要只给空泛建议，不要编造不存在的数据。",
-                    },
-                    {"role": "user", "content": prompt},
-                ],
-                "temperature": 0.3,
-                "max_tokens": 1200,
-            },
-            ensure_ascii=False,
-        ).encode("utf-8")
+        body = json.dumps(request_body, ensure_ascii=False).encode("utf-8")
+        base_url = str(cloud_config.get("base_url") or self.cloud_ai_base_url)
         req = request.Request(
-            "https://api.deepseek.com/chat/completions",
+            f"{base_url.rstrip('/')}/chat/completions",
             data=body,
             headers={
                 "Content-Type": "application/json",
@@ -300,6 +321,8 @@ class KPLBPHandler(SimpleHTTPRequestHandler):
             return {
                 "error": str(exc),
                 "prompt": prompt,
+                "messages": messages,
+                "request_body": request_body,
                 "local_answer": local_answer,
                 "recommendations": recommendations,
             }
@@ -311,12 +334,55 @@ class KPLBPHandler(SimpleHTTPRequestHandler):
         return {
             "answer": content,
             "prompt": prompt,
+            "messages": messages,
+            "request_body": request_body,
             "local_answer": local_answer,
             "recommendations": recommendations,
             "raw": result,
         }
 
-    def _deepseek_prompt(
+    def _cloud_ai_messages(self, prompt: str) -> list[dict[str, str]]:
+        return [
+            {
+                "role": "system",
+                "content": (
+                    "你是 KPL 职业赛 BP 教练。只基于用户给出的 BP 状态、英雄标签、"
+                    "本地模型推荐、阵容分析和 BP 经验知识库回答。回答必须具体，必须分别讨论蓝方和红方，"
+                    "不要只给空泛建议，不要编造不存在的数据。"
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ]
+
+    def _cloud_ai_request_body(self, messages: list[dict[str, str]]) -> dict[str, object]:
+        cloud_config = self._cloud_ai_config()
+        return {
+            "model": str(cloud_config.get("model") or self.cloud_ai_model),
+            "messages": messages,
+            "stream": False,
+            "max_tokens": 1600,
+            "temperature": 0.45,
+            "top_p": 0.7,
+            "top_k": 50,
+            "frequency_penalty": 0.6,
+        }
+
+    def _cloud_ai_config(self) -> dict[str, object]:
+        config: dict[str, object] = {}
+        if self.cloud_config_path.exists():
+            try:
+                raw = json.loads(self.cloud_config_path.read_text(encoding="utf-8"))
+                if isinstance(raw, dict):
+                    config.update(raw)
+            except (OSError, json.JSONDecodeError):
+                pass
+        if os.environ.get("CLOUD_AI_BASE_URL"):
+            config["base_url"] = os.environ["CLOUD_AI_BASE_URL"]
+        if os.environ.get("CLOUD_AI_MODEL"):
+            config["model"] = os.environ["CLOUD_AI_MODEL"]
+        return config
+
+    def _cloud_ai_prompt(
         self,
         payload: dict[str, object],
         state: BPState,
@@ -325,11 +391,18 @@ class KPLBPHandler(SimpleHTTPRequestHandler):
     ) -> str:
         question = str(payload.get("question", "请分析当前 BP 和阵容思路")).strip()
         knowledge = self._load_bp_knowledge()
+        mode = str(payload.get("mode", "single") or "single")
+        game_index = int(payload.get("game_index", 1) or 1)
+        camp1_global = self._global_used_for_deepseek(payload, "camp1")
+        camp2_global = self._global_used_for_deepseek(payload, "camp2")
         return "\n".join(
             [
                 "请作为 KPL BP 教练分析下面局面。",
                 "",
                 f"用户问题：{question}",
+                f"赛制模式：{mode}，当前第 {game_index} 局",
+                f"蓝方全局已用英雄：{json.dumps(camp1_global, ensure_ascii=False)}",
+                f"红方全局已用英雄：{json.dumps(camp2_global, ensure_ascii=False)}",
                 f"当前 BP 状态：{json.dumps(state.to_dict(), ensure_ascii=False)}",
                 f"本地模型推荐：{json.dumps(recommendations, ensure_ascii=False)}",
                 f"英雄标签阵容分析：{json.dumps(local_answer['analysis'], ensure_ascii=False)}",
@@ -411,8 +484,13 @@ class KPLBPHandler(SimpleHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
+
+    def end_headers(self) -> None:
+        self.send_header("Cache-Control", "no-store")
+        super().end_headers()
 
     def do_OPTIONS(self) -> None:
         self.send_response(204)
@@ -429,7 +507,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--hero-meta", default=str(ROOT / "hero_meta.csv"))
     parser.add_argument("--model", default=str(ROOT / "models" / "kpl_bp_agent.json"))
     parser.add_argument("--bp-knowledge", default=str(ROOT / "docs" / "BP_EXPERIENCE.md"))
-    parser.add_argument("--deepseek-model", default="deepseek-chat")
+    parser.add_argument("--cloud-config", default=str(ROOT / "cloud_api_config.json"))
+    parser.add_argument("--cloud-ai-base-url", default=os.environ.get("CLOUD_AI_BASE_URL", "https://api.moark.com/v1"))
+    parser.add_argument("--cloud-ai-model", default=os.environ.get("CLOUD_AI_MODEL", "Qwen3.6-Max"))
     return parser
 
 
@@ -438,7 +518,9 @@ def main() -> None:
     KPLBPHandler.hero_meta_path = Path(args.hero_meta)
     KPLBPHandler.model_path = Path(args.model)
     KPLBPHandler.bp_knowledge_path = Path(args.bp_knowledge)
-    KPLBPHandler.deepseek_model = args.deepseek_model
+    KPLBPHandler.cloud_config_path = Path(args.cloud_config)
+    KPLBPHandler.cloud_ai_base_url = args.cloud_ai_base_url
+    KPLBPHandler.cloud_ai_model = args.cloud_ai_model
     server = ThreadingHTTPServer((args.host, args.port), KPLBPHandler)
     print(f"KPL BP app running at http://{args.host}:{args.port}")
     print("Press Ctrl+C to stop.")
