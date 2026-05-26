@@ -6,16 +6,19 @@
     <title>KPL BP 模拟器</title>
     <style>
       :root {
-        --bg: #0d1220;
-        --panel: #161f33;
-        --panel2: #1e2942;
-        --text: #f2f6ff;
-        --muted: #9aa8c7;
-        --line: #314061;
-        --gold: #f4c86a;
-        --blue: #75aaff;
-        --red: #ff8585;
-        --green: #76e0ac;
+        --bg: #f4f6fb;
+        --panel: #ffffff;
+        --panel2: #f0f4fa;
+        --text: #1a2332;
+        --muted: #5c6b82;
+        --line: #d8e0ed;
+        --gold: #c8960c;
+        --gold-light: #fff8e8;
+        --blue: #1e4d8c;
+        --blue-light: #e8f0fb;
+        --red: #c93c3c;
+        --red-light: #fff0f0;
+        --green: #2d8a5e;
       }
 
       * {
@@ -26,8 +29,8 @@
         margin: 0;
         min-height: 100vh;
         background:
-          radial-gradient(circle at 12% 0%, rgba(117, 170, 255, 0.2), transparent 34rem),
-          radial-gradient(circle at 88% 12%, rgba(244, 200, 106, 0.13), transparent 30rem),
+          radial-gradient(circle at 12% 0%, rgba(30, 77, 140, 0.08), transparent 34rem),
+          radial-gradient(circle at 88% 12%, rgba(200, 150, 12, 0.07), transparent 30rem),
           var(--bg);
         color: var(--text);
         font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
@@ -41,6 +44,7 @@
         margin: 8px 0 10px;
         font-size: clamp(34px, 5vw, 62px);
         line-height: 1.04;
+        color: var(--blue);
       }
 
       .eyebrow {
@@ -64,14 +68,15 @@
       }
 
       .nav button {
-        border: 1px solid rgba(244, 200, 106, 0.26);
-        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid var(--line);
+        background: var(--panel);
         color: var(--text);
       }
 
       .nav button.active {
-        background: linear-gradient(135deg, var(--gold), #ff9d5c);
-        color: #16100a;
+        background: linear-gradient(135deg, var(--gold), #e8b84a);
+        color: #2a2008;
+        border-color: transparent;
       }
 
       .hero-dashboard {
@@ -84,13 +89,14 @@
       .metric {
         border: 1px solid var(--line);
         border-radius: 20px;
-        background: rgba(255, 255, 255, 0.045);
+        background: var(--panel);
+        box-shadow: 0 4px 18px rgba(30, 77, 140, 0.06);
         padding: 16px;
       }
 
       .metric b {
         display: block;
-        color: var(--gold);
+        color: var(--blue);
         font-size: 24px;
         margin-bottom: 4px;
       }
@@ -102,9 +108,10 @@
 
       main {
         display: grid;
-        grid-template-columns: 360px 1fr 390px;
+        grid-template-columns: 400px minmax(0, 1fr) 420px;
         gap: 18px;
         padding: 0 min(5vw, 64px) 42px;
+        align-items: stretch;
       }
 
       .page {
@@ -122,9 +129,41 @@
       .panel {
         border: 1px solid var(--line);
         border-radius: 24px;
-        background: linear-gradient(145deg, rgba(30, 41, 66, 0.94), rgba(18, 26, 45, 0.94));
-        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.3);
+        background: var(--panel);
+        box-shadow: 0 8px 32px rgba(30, 77, 140, 0.08);
         padding: 18px;
+      }
+
+      .panel-settings,
+      .panel-ai,
+      .panel-center {
+        min-height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .panel-settings,
+      .panel-ai {
+        overflow-y: auto;
+      }
+
+      .center-hero-section {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .center-bp-section {
+        margin-top: 4px;
+        padding-top: 16px;
+        border-top: 1px solid var(--line);
+        flex-shrink: 0;
+      }
+
+      .hero-list-main {
+        flex: 1;
+        min-height: 240px;
       }
 
       .panel h2 {
@@ -145,11 +184,18 @@
         width: 100%;
         border: 1px solid var(--line);
         border-radius: 13px;
-        background: rgba(7, 12, 24, 0.62);
+        background: var(--panel2);
         color: var(--text);
         padding: 11px 12px;
         outline: none;
         font: inherit;
+      }
+
+      input:focus,
+      textarea:focus,
+      select:focus {
+        border-color: var(--blue);
+        box-shadow: 0 0 0 3px rgba(30, 77, 140, 0.12);
       }
 
       textarea {
@@ -160,22 +206,27 @@
       button {
         border: 0;
         border-radius: 14px;
-        background: linear-gradient(135deg, var(--gold), #ff9d5c);
-        color: #16100a;
+        background: linear-gradient(135deg, var(--gold), #e8b84a);
+        color: #2a2008;
         cursor: pointer;
         font-weight: 800;
         padding: 11px 14px;
       }
 
+      button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+
       button.secondary {
-        border: 1px solid rgba(117, 170, 255, 0.42);
-        background: rgba(117, 170, 255, 0.14);
-        color: var(--text);
+        border: 1px solid rgba(30, 77, 140, 0.35);
+        background: var(--blue-light);
+        color: var(--blue);
       }
 
       button.danger {
-        border: 1px solid rgba(255, 133, 133, 0.38);
-        background: rgba(255, 133, 133, 0.12);
+        border: 1px solid rgba(201, 60, 60, 0.35);
+        background: var(--red-light);
         color: var(--red);
       }
 
@@ -187,15 +238,15 @@
       }
 
       .current-step {
-        border: 1px solid rgba(244, 200, 106, 0.35);
+        border: 1px solid rgba(200, 150, 12, 0.35);
         border-radius: 18px;
-        background: rgba(244, 200, 106, 0.08);
+        background: var(--gold-light);
         padding: 14px;
         margin-bottom: 14px;
       }
 
       .current-step strong {
-        color: var(--gold);
+        color: var(--blue);
       }
 
       .bp-board {
@@ -207,7 +258,7 @@
       .side {
         border: 1px solid var(--line);
         border-radius: 20px;
-        background: rgba(9, 14, 27, 0.5);
+        background: var(--panel2);
         padding: 14px;
       }
 
@@ -256,7 +307,8 @@
       .slot.filled {
         border-style: solid;
         color: var(--text);
-        background: rgba(255, 255, 255, 0.06);
+        background: var(--panel);
+        border-color: var(--blue);
       }
 
       .timeline {
@@ -269,7 +321,7 @@
       .step {
         border: 1px solid var(--line);
         border-radius: 10px;
-        background: rgba(255, 255, 255, 0.04);
+        background: var(--panel2);
         color: var(--muted);
         font-size: 12px;
         padding: 8px 5px;
@@ -278,12 +330,15 @@
 
       .step.done {
         color: var(--text);
-        border-color: rgba(118, 224, 172, 0.38);
+        border-color: rgba(45, 138, 94, 0.45);
+        background: #eef8f2;
       }
 
       .step.active {
-        color: var(--gold);
+        color: var(--blue);
         border-color: var(--gold);
+        background: var(--gold-light);
+        font-weight: 700;
       }
 
       .hero-list {
@@ -299,17 +354,18 @@
       }
 
       .lane-section {
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        border: 1px solid var(--line);
         border-radius: 16px;
         margin-bottom: 10px;
         overflow: hidden;
+        background: var(--panel);
       }
 
       .lane-title {
         display: flex;
         justify-content: space-between;
-        background: rgba(255, 255, 255, 0.05);
-        color: var(--gold);
+        background: var(--blue-light);
+        color: var(--blue);
         font-size: 13px;
         font-weight: 800;
         padding: 8px 10px;
@@ -325,7 +381,7 @@
       .hero-card {
         border: 1px solid var(--line);
         border-radius: 14px;
-        background: rgba(255, 255, 255, 0.045);
+        background: var(--panel);
         color: var(--text);
         cursor: pointer;
         min-height: 72px;
@@ -335,6 +391,7 @@
 
       .hero-card:hover {
         border-color: var(--gold);
+        box-shadow: 0 4px 12px rgba(200, 150, 12, 0.15);
       }
 
       .hero-card.disabled {
@@ -350,10 +407,10 @@
 
       .mini-chip {
         display: inline-block;
-        border: 1px solid rgba(117, 170, 255, 0.35);
+        border: 1px solid rgba(30, 77, 140, 0.25);
         border-radius: 999px;
-        background: rgba(117, 170, 255, 0.12);
-        color: var(--text);
+        background: var(--blue-light);
+        color: var(--blue);
         font-size: 12px;
         margin: 4px 6px 0 0;
         padding: 4px 9px;
@@ -363,7 +420,7 @@
         position: fixed;
         inset: 0;
         display: none;
-        background: rgba(3, 6, 13, 0.72);
+        background: rgba(26, 35, 50, 0.45);
         z-index: 1000;
       }
 
@@ -377,7 +434,8 @@
         overflow: auto;
         border: 1px solid var(--line);
         border-radius: 20px;
-        background: linear-gradient(145deg, rgba(24, 35, 58, 0.98), rgba(15, 23, 40, 0.98));
+        background: var(--panel);
+        box-shadow: 0 24px 60px rgba(30, 77, 140, 0.15);
         margin: 6vh auto;
         padding: 16px;
       }
@@ -394,16 +452,151 @@
         align-items: center;
         border: 1px solid var(--line);
         border-radius: 14px;
-        background: rgba(255, 255, 255, 0.045);
+        background: var(--panel2);
         padding: 10px;
       }
 
       .rec b {
-        color: var(--gold);
+        color: var(--blue);
       }
 
       .rec small {
         color: var(--muted);
+      }
+
+      .rec-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+
+      .profile-panel {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--panel2);
+        margin: 14px 0;
+        padding: 10px 12px;
+      }
+
+      .profile-panel summary {
+        cursor: pointer;
+        color: var(--blue);
+        font-weight: 700;
+      }
+
+      .profile-camp {
+        margin-top: 14px;
+      }
+
+      .profile-camp h3 {
+        margin: 0 0 10px;
+        font-size: 15px;
+      }
+
+      .profile-player {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 10px;
+        margin-bottom: 8px;
+        background: var(--panel);
+      }
+
+      .profile-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .profile-grid label {
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+        margin-bottom: 4px;
+      }
+
+      .profile-grid input,
+      .profile-grid select {
+        width: 100%;
+      }
+
+      .rerank-panel {
+        display: grid;
+        gap: 10px;
+        margin-top: 14px;
+      }
+
+      .rerank-card {
+        border: 1px solid rgba(200, 150, 12, 0.35);
+        border-radius: 14px;
+        background: var(--gold-light);
+        padding: 12px;
+      }
+
+      .rerank-item {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel2);
+        padding: 10px;
+      }
+
+      .rank-change {
+        color: var(--green);
+        font-size: 12px;
+        margin-left: 8px;
+      }
+
+      .rank-change.down {
+        color: var(--red);
+      }
+
+      .skeleton {
+        height: 72px;
+        border-radius: 12px;
+        background: linear-gradient(90deg, var(--panel2), #e4eaf4, var(--panel2));
+        background-size: 200% 100%;
+        animation: shimmer 1.2s infinite;
+      }
+
+      .ai-waiting {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        border: 1px dashed rgba(30, 77, 140, 0.35);
+        border-radius: 14px;
+        background: var(--blue-light);
+        color: var(--blue);
+        padding: 16px;
+        line-height: 1.6;
+      }
+
+      .ai-waiting strong {
+        display: block;
+        margin-bottom: 4px;
+      }
+
+      .ai-spinner {
+        width: 28px;
+        height: 28px;
+        border: 3px solid rgba(30, 77, 140, 0.15);
+        border-top-color: var(--blue);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        flex-shrink: 0;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+
+      .analysis-box.is-loading {
+        min-height: 80px;
+      }
+
+      @keyframes shimmer {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
       }
 
       .analysis-box {
@@ -431,6 +624,15 @@
       @media (max-width: 1200px) {
         main {
           grid-template-columns: 1fr;
+        }
+
+        .panel-settings,
+        .panel-ai {
+          max-height: none;
+        }
+
+        .hero-list-main {
+          max-height: 360px;
         }
 
         .hero-dashboard {
@@ -471,7 +673,7 @@
     </section>
 
     <main id="bpPage" class="page active">
-      <section class="panel">
+      <section class="panel panel-settings">
         <h2>模拟设置</h2>
         <label>蓝方队伍</label>
         <input id="camp1Team" placeholder="例如 北京JDG" />
@@ -483,56 +685,69 @@
           <select id="gameIndex"></select>
         </div>
         <div class="hint">全局 BP 模式下，已用英雄会在后续局自动从本方 pick 候选里过滤；巅峰对决自动切换为无 ban 的 10 手 pick。</div>
-        <label>蓝方全局已用英雄（点击选择）</label>
+        <label>蓝方全局已用英雄</label>
         <div class="button-row">
           <button id="editCamp1Global" class="secondary">编辑蓝方已用</button>
           <button id="clearCamp1Global" class="danger">清空蓝方</button>
         </div>
-        <div id="camp1GlobalView" class="hero-list" style="max-height: 110px; margin-top: 8px"></div>
-        <label>红方全局已用英雄（点击选择）</label>
+        <div id="camp1GlobalView" class="hero-list" style="max-height: 90px; margin-top: 8px"></div>
+        <label>红方全局已用英雄</label>
         <div class="button-row">
           <button id="editCamp2Global" class="secondary">编辑红方已用</button>
           <button id="clearCamp2Global" class="danger">清空红方</button>
         </div>
-        <div id="camp2GlobalView" class="hero-list" style="max-height: 110px; margin-top: 8px"></div>
-        <label>搜索英雄或标签</label>
-        <input id="heroSearch" placeholder="公孙离 / 中路 / 开团 / 射手" />
+        <div id="camp2GlobalView" class="hero-list" style="max-height: 90px; margin-top: 8px"></div>
+        <details class="profile-panel" id="teamProfilePanel">
+          <summary>队伍画像（选手风格 / 段位）</summary>
+          <div class="hint">填写后会随推荐、云端 AI 和 AI 重排序一起发送，用于影响 BP 建议。</div>
+          <div id="camp1ProfileRoot" class="profile-camp"></div>
+          <div id="camp2ProfileRoot" class="profile-camp"></div>
+        </details>
         <div class="button-row">
           <button id="refreshRec">刷新推荐</button>
           <button id="undoBtn" class="secondary">撤销一步</button>
         </div>
         <button id="resetBtn" class="danger" style="width: 100%; margin-top: 10px">重置 BP</button>
         <div id="status" class="status">正在加载...</div>
-        <hr style="border-color: var(--line); margin: 18px 0" />
-        <h2>可选英雄</h2>
-        <div id="heroList" class="hero-list"></div>
       </section>
 
-      <section class="panel">
-        <h2>BP 棋盘</h2>
-        <div class="current-step" id="currentStep">等待初始化</div>
-        <div class="bp-board">
-          <div class="side blue">
-            <h3>蓝方 Camp 1</h3>
-            <label>Pick</label>
-            <div id="camp1Picks" class="slot-grid"></div>
-            <label>Ban</label>
-            <div id="camp1Bans" class="slot-grid"></div>
-          </div>
-          <div class="side red">
-            <h3>红方 Camp 2</h3>
-            <label>Pick</label>
-            <div id="camp2Picks" class="slot-grid"></div>
-            <label>Ban</label>
-            <div id="camp2Bans" class="slot-grid"></div>
-          </div>
+      <section class="panel panel-center">
+        <div class="center-hero-section">
+          <h2>可选英雄</h2>
+          <label>搜索英雄或标签</label>
+          <input id="heroSearch" placeholder="公孙离 / 中路 / 开团 / 射手" />
+          <div id="heroList" class="hero-list hero-list-main"></div>
         </div>
-        <div id="timeline" class="timeline"></div>
+        <div class="center-bp-section">
+          <h2>BP 棋盘</h2>
+          <div class="current-step" id="currentStep">等待初始化</div>
+          <div class="bp-board">
+            <div class="side blue">
+              <h3>蓝方 Camp 1</h3>
+              <label>Pick</label>
+              <div id="camp1Picks" class="slot-grid"></div>
+              <label>Ban</label>
+              <div id="camp1Bans" class="slot-grid"></div>
+            </div>
+            <div class="side red">
+              <h3>红方 Camp 2</h3>
+              <label>Pick</label>
+              <div id="camp2Picks" class="slot-grid"></div>
+              <label>Ban</label>
+              <div id="camp2Bans" class="slot-grid"></div>
+            </div>
+          </div>
+          <div id="timeline" class="timeline"></div>
+        </div>
       </section>
 
-      <section class="panel">
-        <h2>模型推荐</h2>
+      <section class="panel panel-ai">
+        <div class="rec-header">
+          <h2 style="margin: 0">模型推荐</h2>
+          <button id="llmRerankBtn">✨ AI 重排序</button>
+        </div>
         <div id="recommendations" class="recommendation"></div>
+        <div id="llmRerankResult" class="rerank-panel"></div>
         <hr style="border-color: var(--line); margin: 18px 0" />
         <h2>云端 AI 复盘</h2>
         <label>提问</label>
@@ -607,22 +822,74 @@
         modes: [],
         actions: [],
         recommendations: [],
+        llmRerankResult: null,
+        llmRerankLoading: false,
+        cloudAiLoading: false,
+        cloudAiLoadingMessage: "",
         legalHeroes: [],
         strategyProfile: null,
         camp1GlobalUsed: [],
         camp2GlobalUsed: [],
         globalModalTarget: "",
         globalModalDraft: [],
-        autoCloudAnalyze: true,
+        autoCloudAnalyze: false,
         cloudRequestId: 0,
       };
 
       const laneOrder = ["对抗路", "打野", "中路", "发育路", "游走"];
+      const styleOptions = ["", "激进开团", "稳健发育", "保护后排", "带节奏", "对线压制"];
+      const tierOptions = ["", "巅峰", "稳定", "状态低迷"];
 
       const $ = (id) => document.getElementById(id);
 
       function setStatus(message) {
         $("status").textContent = message;
+      }
+
+      function aiWaitingHtml(message) {
+        return `
+          <div class="ai-waiting">
+            <div class="ai-spinner"></div>
+            <div>
+              <strong>大模型分析中...</strong>
+              ${message || "正在等待云端模型返回，请稍候。"}
+            </div>
+          </div>
+        `;
+      }
+
+      function setCloudAiLoading(loading, message = "正在调用云端大模型，预计需要 30-90 秒...") {
+        app.cloudAiLoading = loading;
+        app.cloudAiLoadingMessage = message;
+        const busy = loading || app.llmRerankLoading;
+        $("cloudAsk").disabled = busy;
+        $("cloudRealtime").disabled = busy;
+        $("analysisCloud").disabled = busy;
+        $("llmRerankBtn").disabled = busy;
+        if (loading) {
+          $("cloudAnswer").classList.add("is-loading");
+          $("cloudAnswer").innerHTML = aiWaitingHtml(message);
+          $("analysisAnswer").classList.add("is-loading");
+          $("analysisAnswer").innerHTML = aiWaitingHtml(message);
+        }
+      }
+
+      function setLlmRerankLoading(loading, message = "正在调用大模型对 top-10 推荐重排序，预计需要 30-90 秒...") {
+        app.llmRerankLoading = loading;
+        const busy = loading || app.cloudAiLoading;
+        $("llmRerankBtn").disabled = busy;
+        $("cloudAsk").disabled = busy;
+        $("cloudRealtime").disabled = busy;
+        $("analysisCloud").disabled = busy;
+        if (loading) {
+          $("llmRerankBtn").textContent = "⏳ 分析中...";
+        } else {
+          $("llmRerankBtn").textContent = "✨ AI 重排序";
+        }
+        renderLlmRerankResult();
+        if (loading) {
+          setStatus(message);
+        }
       }
 
       function usedHeroes() {
@@ -651,16 +918,43 @@
         return result;
       }
 
-      async function api(path, options = {}) {
-        const response = await fetch(path, {
-          headers: { "Content-Type": "application/json" },
-          ...options,
-        });
-        const payload = await response.json();
-        if (!response.ok) {
-          throw new Error(payload.error || `API 请求失败：${response.status}`);
+      async function api(path, options = {}, timeoutMs = 0) {
+        const controller = timeoutMs > 0 ? new AbortController() : null;
+        const timer = controller
+          ? setTimeout(() => controller.abort(), timeoutMs)
+          : null;
+        try {
+          const response = await fetch(path, {
+            headers: { "Content-Type": "application/json" },
+            ...options,
+            signal: controller?.signal,
+          });
+          let payload = {};
+          try {
+            payload = await response.json();
+          } catch (parseError) {
+            if (!response.ok) {
+              throw new Error(`API 请求失败：${response.status}`);
+            }
+            throw new Error("服务器返回了无法解析的响应。");
+          }
+          if (!response.ok) {
+            throw new Error(payload.error || `API 请求失败：${response.status}`);
+          }
+          return payload;
+        } catch (error) {
+          if (error.name === "AbortError") {
+            throw new Error("请求超时。AI 重排序通常需要 30-90 秒，请稍后重试。");
+          }
+          if (error.message === "Failed to fetch") {
+            throw new Error(
+              "网络连接中断或请求超时。AI 重排序需要等待云端模型返回，通常 30-90 秒；请确认服务仍在运行后重试。"
+            );
+          }
+          throw error;
+        } finally {
+          if (timer) clearTimeout(timer);
         }
-        return payload;
       }
 
       function payloadBase() {
@@ -672,10 +966,100 @@
           game_index: Number($("gameIndex").value || 1),
           camp1_global_used: app.camp1GlobalUsed,
           camp2_global_used: app.camp2GlobalUsed,
+          camp1_profile: buildTeamProfile(1),
+          camp2_profile: buildTeamProfile(2),
         };
       }
 
+      function buildTeamProfile(camp) {
+        const prefix = camp === 1 ? "camp1" : "camp2";
+        const players = [];
+        for (let index = 0; index < 5; index++) {
+          players.push({
+            name: $(`${prefix}PlayerName${index}`)?.value.trim() || "",
+            lane: $(`${prefix}PlayerLane${index}`)?.value || "",
+            style: $(`${prefix}PlayerStyle${index}`)?.value || "",
+            tier: $(`${prefix}PlayerTier${index}`)?.value || "",
+            preferred_heroes: splitHeroInput($(`${prefix}PlayerPreferred${index}`)?.value || ""),
+            avoid_heroes: splitHeroInput($(`${prefix}PlayerAvoid${index}`)?.value || ""),
+          });
+        }
+        return {
+          camp,
+          team_name: $(camp === 1 ? "camp1Team" : "camp2Team").value.trim(),
+          players,
+          overall_style: $(`${prefix}OverallStyle`)?.value.trim() || "",
+          win_condition: $(`${prefix}WinCondition`)?.value.trim() || "",
+        };
+      }
+
+      function splitHeroInput(value) {
+        return value
+          .split(/[,，、/]/)
+          .map((item) => item.trim())
+          .filter(Boolean);
+      }
+
+      function renderTeamProfileForms() {
+        const renderCamp = (camp) => {
+          const prefix = camp === 1 ? "camp1" : "camp2";
+          const side = camp === 1 ? "蓝方" : "红方";
+          const root = $(`${prefix}ProfileRoot`);
+          root.innerHTML = `
+            <h3>${side}队伍画像</h3>
+            <label>整体风格</label>
+            <input id="${prefix}OverallStyle" placeholder="例如 早期压制 / 运营发育" />
+            <label>胜利条件偏好</label>
+            <input id="${prefix}WinCondition" placeholder="例如 前期拿龙转线 / 后期双核" />
+          `;
+          for (let index = 0; index < 5; index++) {
+            const lane = laneOrder[index] || "";
+            const block = document.createElement("div");
+            block.className = "profile-player";
+            block.innerHTML = `
+              <div class="hint">选手 ${index + 1}${lane ? ` · 默认 ${lane}` : ""}</div>
+              <div class="profile-grid">
+                <div>
+                  <label>姓名</label>
+                  <input id="${prefix}PlayerName${index}" placeholder="选手 ID" />
+                </div>
+                <div>
+                  <label>主线路</label>
+                  <select id="${prefix}PlayerLane${index}">
+                    ${laneOrder.map((item) => `<option value="${item}" ${item === lane ? "selected" : ""}>${item}</option>`).join("")}
+                  </select>
+                </div>
+                <div>
+                  <label>打法风格</label>
+                  <select id="${prefix}PlayerStyle${index}">
+                    ${styleOptions.map((item) => `<option value="${item}">${item || "未指定"}</option>`).join("")}
+                  </select>
+                </div>
+                <div>
+                  <label>状态 / 段位</label>
+                  <select id="${prefix}PlayerTier${index}">
+                    ${tierOptions.map((item) => `<option value="${item}">${item || "未指定"}</option>`).join("")}
+                  </select>
+                </div>
+                <div>
+                  <label>擅长英雄</label>
+                  <input id="${prefix}PlayerPreferred${index}" placeholder="公孙离, 后羿" />
+                </div>
+                <div>
+                  <label>回避英雄</label>
+                  <input id="${prefix}PlayerAvoid${index}" placeholder="不知火舞, 干将" />
+                </div>
+              </div>
+            `;
+            root.appendChild(block);
+          }
+        };
+        renderCamp(1);
+        renderCamp(2);
+      }
+
       async function loadConfig() {
+        renderTeamProfileForms();
         const payload = await api("/api/bp/config");
         app.heroes = payload.heroes || [];
         app.modes = payload.modes || [];
@@ -723,12 +1107,13 @@
         setStatus("正在请求本地 BP 模型推荐...");
         const payload = await api("/api/bp/recommend", {
           method: "POST",
-          body: JSON.stringify({ ...payloadBase(), top_k: 8, search_depth: 2 }),
+          body: JSON.stringify({ ...payloadBase(), top_k: 10, search_depth: 2 }),
         });
         app.schedule = payload.schedule || app.schedule;
         app.legalHeroes = payload.legal_heroes || [];
         app.recommendations = payload.recommendations || [];
         app.strategyProfile = payload.strategy_profile || null;
+        app.llmRerankResult = null;
         render();
         setStatus("推荐已更新。");
       }
@@ -745,9 +1130,7 @@
         }
         app.actions.push({ hero });
         render();
-        refreshRecommendations()
-          .then(() => autoCloudAnalyzeAfterAction(hero))
-          .catch((error) => setStatus(error.message));
+        refreshRecommendations().catch((error) => setStatus(error.message));
       }
 
       function renderSlots(id, values, size = 5) {
@@ -924,6 +1307,100 @@
         return !usedHeroes().has(hero);
       }
 
+      function originalRankMap() {
+        const map = new Map();
+        app.recommendations.forEach((rec, index) => {
+          map.set(rec.hero, index + 1);
+        });
+        return map;
+      }
+
+      function renderLlmRerankResult() {
+        const node = $("llmRerankResult");
+        node.innerHTML = "";
+        if (app.llmRerankLoading) {
+          node.innerHTML = aiWaitingHtml("正在等待大模型返回重排序结果，请勿关闭页面。");
+          return;
+        }
+        const result = app.llmRerankResult;
+        if (!result) return;
+        if (result.error) {
+          const error = document.createElement("div");
+          error.className = "rerank-card";
+          error.innerHTML = `<strong>AI 重排序未完成</strong><br /><span class="hint">${result.error}</span><br /><span class="hint">提示：该接口需要等待云端大模型返回，通常 30-90 秒。若频繁失败，请重启后端服务后重试。</span>`;
+          node.appendChild(error);
+          return;
+        }
+        if (result.key_decision) {
+          const decision = document.createElement("div");
+          decision.className = "rerank-card";
+          decision.innerHTML = `<strong>下一手核心判断</strong><br />${result.key_decision}`;
+          node.appendChild(decision);
+        }
+        if (result.top3_analysis) {
+          const top3 = document.createElement("div");
+          top3.className = "rerank-card";
+          top3.innerHTML = `<strong>Top 3 综合分析</strong><br />${result.top3_analysis}`;
+          node.appendChild(top3);
+        }
+        const rankMap = originalRankMap();
+        (result.reranked || []).forEach((item) => {
+          const div = document.createElement("div");
+          div.className = "rerank-item";
+          const originalRank = item.original_rank || rankMap.get(item.hero) || "-";
+          const delta = typeof originalRank === "number" ? originalRank - item.rank : 0;
+          let changeText = "";
+          if (delta > 0) changeText = `<span class="rank-change">↑${delta}</span>`;
+          if (delta < 0) changeText = `<span class="rank-change down">↓${Math.abs(delta)}</span>`;
+          const bonus = item.style_bonus ? " · 风格加分" : "";
+          div.innerHTML = `
+            <div><b>${item.rank}. ${item.hero}</b>${changeText}<small>${bonus}</small></div>
+            <div class="hint">模型原排名：${originalRank}</div>
+            <div>${item.reason || ""}</div>
+            <button class="secondary" data-hero="${item.hero}" style="margin-top:8px">选择</button>
+          `;
+          div.querySelector("button").addEventListener("click", () => chooseHero(item.hero));
+          node.appendChild(div);
+        });
+      }
+
+      async function llmRerank() {
+        if (!app.recommendations.length) {
+          setStatus("当前没有可重排序的推荐。");
+          return;
+        }
+        setLlmRerankLoading(true);
+        const split = splitActions();
+        const slot = currentSlot();
+        const own = slot?.camp === 2 ? split.camp2Picks : split.camp1Picks;
+        const enemy = slot?.camp === 2 ? split.camp1Picks : split.camp2Picks;
+        try {
+          const payload = await api(
+            "/api/bp/llm-rerank",
+            {
+              method: "POST",
+              body: JSON.stringify({
+                ...payloadBase(),
+                heroes: own,
+                enemy_heroes: enemy,
+                recommendations: app.recommendations,
+                top_k: 10,
+                question: "请结合队伍画像，对当前 top-10 推荐做重排序并给出逐英雄分析。",
+              }),
+            },
+            210000
+          );
+          app.llmRerankResult = payload;
+          setStatus(payload.error ? `AI 重排序未完成：${payload.error}` : "AI 重排序完成。");
+        } catch (error) {
+          app.llmRerankResult = { error: error.message };
+          setStatus(error.message);
+        } finally {
+          setLlmRerankLoading(false);
+          renderLlmRerankResult();
+        }
+      }
+
       function renderRecommendations() {
         const node = $("recommendations");
         node.innerHTML = "";
@@ -937,6 +1414,7 @@
           const empty = document.createElement("div");
           empty.textContent = app.actions.length >= app.schedule.length ? "BP 已完成。" : "暂无推荐。";
           node.appendChild(empty);
+          renderLlmRerankResult();
           return;
         }
         app.recommendations.forEach((rec, index) => {
@@ -952,6 +1430,7 @@
           div.querySelector("button").addEventListener("click", () => chooseHero(rec.hero));
           node.appendChild(div);
         });
+        renderLlmRerankResult();
       }
 
       function renderDashboard() {
@@ -1026,29 +1505,54 @@
       async function cloudAsk(questionOverride = "", options = {}) {
         const requestId = ++app.cloudRequestId;
         const silent = Boolean(options.silent);
+        const loadingMessage = options.loadingMessage || "正在调用云端大模型分析 BP，预计需要 30-90 秒...";
+        setCloudAiLoading(true, loadingMessage);
         if (!silent) {
-          setStatus("正在调用云端 AI。若未配置 CLOUD_AI_API_KEY，会返回提示词和本地分析。");
+          setStatus(loadingMessage);
         }
         const split = splitActions();
         const slot = currentSlot();
         const own = slot?.camp === 2 ? split.camp2Picks : split.camp1Picks;
         const enemy = slot?.camp === 2 ? split.camp1Picks : split.camp2Picks;
-        const payload = await api("/api/cloud-ai", {
-          method: "POST",
-          body: JSON.stringify({
-            ...payloadBase(),
-            heroes: own,
-            enemy_heroes: enemy,
-            question: questionOverride || $("cloudQuestion").value,
-          }),
-        });
-        if (requestId !== app.cloudRequestId) return;
-        $("cloudAnswer").textContent = payload.answer || payload.local_answer?.answer || payload.error || "无返回";
-        $("analysisAnswer").textContent = $("cloudAnswer").textContent;
-        if (!silent) {
-          setStatus(payload.error ? `云端 AI 未完成：${payload.error}` : "云端 AI 分析完成。");
+        try {
+          const payload = await api(
+            "/api/cloud-ai",
+            {
+              method: "POST",
+              body: JSON.stringify({
+                ...payloadBase(),
+                heroes: own,
+                enemy_heroes: enemy,
+                question: questionOverride || $("cloudQuestion").value,
+              }),
+            },
+            150000
+          );
+          if (requestId !== app.cloudRequestId) return;
+          const answer = payload.answer || payload.local_answer?.answer || payload.error || "无返回";
+          $("cloudAnswer").classList.remove("is-loading");
+          $("cloudAnswer").textContent = answer;
+          $("analysisAnswer").classList.remove("is-loading");
+          $("analysisAnswer").textContent = answer;
+          if (!silent) {
+            setStatus(payload.error ? `云端 AI 未完成：${payload.error}` : "云端 AI 分析完成。");
+          }
+          return payload;
+        } catch (error) {
+          if (requestId !== app.cloudRequestId) return;
+          $("cloudAnswer").classList.remove("is-loading");
+          $("cloudAnswer").textContent = error.message;
+          $("analysisAnswer").classList.remove("is-loading");
+          $("analysisAnswer").textContent = error.message;
+          if (!silent) {
+            setStatus(error.message);
+          }
+          throw error;
+        } finally {
+          if (requestId === app.cloudRequestId) {
+            setCloudAiLoading(false);
+          }
         }
-        return payload;
       }
 
       async function autoCloudAnalyzeAfterAction(hero) {
@@ -1057,9 +1561,15 @@
         const action = slot?.action_type === "ban" ? "ban" : "pick";
         const side = slot?.camp === 1 ? "蓝方" : "红方";
         const question = `刚刚完成了一手 ${hero}。请自动复盘当前 BP：分别说明蓝方和红方阵容优劣、英雄摇摆分路空间、下一手轮到${side}${action}时应优先考虑什么，并结合本地推荐给出候选。`;
-        setStatus("已落子，正在自动调用云端 AI 分析...");
-        const payload = await cloudAsk(question, { silent: true });
-        setStatus(payload?.error ? `云端 AI 自动分析未完成：${payload.error}` : "已自动完成云端 AI 分析。");
+        try {
+          const payload = await cloudAsk(question, {
+            silent: true,
+            loadingMessage: "已落子，正在自动调用大模型复盘当前 BP...",
+          });
+          setStatus(payload?.error ? `云端 AI 自动分析未完成：${payload.error}` : "已自动完成云端 AI 分析。");
+        } catch (error) {
+          setStatus(`云端 AI 自动分析未完成：${error.message}`);
+        }
       }
 
       $("heroSearch").addEventListener("input", renderHeroes);
@@ -1106,6 +1616,7 @@
         refreshRecommendations().catch((error) => setStatus(error.message));
       });
       $("refreshRec").addEventListener("click", () => refreshRecommendations().catch((error) => setStatus(error.message)));
+      $("llmRerankBtn").addEventListener("click", () => llmRerank().catch((error) => setStatus(error.message)));
       $("undoBtn").addEventListener("click", () => {
         app.actions.pop();
         refreshRecommendations().catch((error) => setStatus(error.message));

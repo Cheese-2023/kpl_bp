@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib import request
@@ -18,7 +19,7 @@ from .bp_rules import (
     strategy_profile_for_mode,
 )
 from .data import load_hero_meta, load_json
-from .schema import BPState
+from .schema import BPState, team_profiles_from_payload, team_profiles_prompt_text
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -31,6 +32,7 @@ class KPLBPHandler(SimpleHTTPRequestHandler):
     bp_knowledge_path = ROOT / "docs" / "BP_EXPERIENCE.md"
     cloud_ai_base_url = "https://api.moark.com/v1"
     cloud_ai_model = "Qwen3.6-Max"
+    cloud_ai_rerank_model = "Qwen3.6-Max"
     cloud_config_path = ROOT / "cloud_api_config.json"
 
     def __init__(self, *args, **kwargs):
@@ -61,6 +63,7 @@ class KPLBPHandler(SimpleHTTPRequestHandler):
             "/api/analyze",
             "/api/ask",
             "/api/bp/recommend",
+            "/api/bp/llm-rerank",
             "/api/deepseek",
             "/api/cloud-ai",
         }:
@@ -79,6 +82,9 @@ class KPLBPHandler(SimpleHTTPRequestHandler):
             return
         if parsed.path == "/api/bp/recommend":
             self._send_json(self._bp_recommend_payload(payload))
+            return
+        if parsed.path == "/api/bp/llm-rerank":
+            self._send_json(self._llm_rerank_payload(payload))
             return
         self._send_json(self._cloud_ai_payload(payload))
 
@@ -303,23 +309,10 @@ class KPLBPHandler(SimpleHTTPRequestHandler):
                 "recommendations": recommendations,
             }
 
-        body = json.dumps(request_body, ensure_ascii=False).encode("utf-8")
-        base_url = str(cloud_config.get("base_url") or self.cloud_ai_base_url)
-        req = request.Request(
-            f"{base_url.rstrip('/')}/chat/completions",
-            data=body,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}",
-            },
-            method="POST",
-        )
-        try:
-            with request.urlopen(req, timeout=30) as response:
-                result = json.loads(response.read().decode("utf-8"))
-        except Exception as exc:
+        result, error = self._call_cloud_ai(api_key, request_body, timeout=120)
+        if error:
             return {
-                "error": str(exc),
+                "error": error,
                 "prompt": prompt,
                 "messages": messages,
                 "request_body": request_body,
@@ -340,6 +333,223 @@ class KPLBPHandler(SimpleHTTPRequestHandler):
             "recommendations": recommendations,
             "raw": result,
         }
+
+    def _llm_rerank_payload(self, payload: dict[str, object]) -> dict[str, object]:
+        cloud_config = self._cloud_ai_config()
+        api_key = (
+            os.environ.get("CLOUD_AI_API_KEY")
+            or os.environ.get("MOARK_API_KEY")
+            or os.environ.get("OPENAI_API_KEY")
+            or os.environ.get("DEEPSEEK_API_KEY")
+            or str(cloud_config.get("api_key") or "")
+        )
+        agent = self._load_agent()
+        state = self._state_from_payload(payload, agent)
+        schedule = self._schedule_from_payload(payload, agent)
+        agent_for_mode = BPAgent(agent.policy_model, agent.value_model, schedule, agent.heroes)
+        mode = str(payload.get("mode", "single") or "single")
+        top_k = int(payload.get("top_k", 10) or 10)
+        search_depth = int(payload.get("search_depth", 2) or 2)
+        candidate_width = max(top_k * 2, 20) if mode != "single" else max(top_k * 2, 12)
+        recommendations = payload.get("recommendations")
+        if not isinstance(recommendations, list) or not recommendations:
+            recommendations = agent_for_mode.recommend(
+                state,
+                top_k=candidate_width,
+                policy_width=candidate_width,
+                search_depth=search_depth,
+                legal_heroes=self._legal_heroes(payload, state, agent),
+            )
+            recommendations = self._strategy_adjusted_recommendations(
+                recommendations,
+                payload,
+                state,
+                agent,
+            )[:top_k]
+        else:
+            recommendations = recommendations[:top_k]
+        camp1_profile, camp2_profile = team_profiles_from_payload(payload)
+        hero_meta = load_hero_meta(self.hero_meta_path)
+        own_heroes = split_hero_names(payload.get("heroes") or state.own_picks())
+        enemy_heroes = split_hero_names(payload.get("enemy_heroes") or state.enemy_picks())
+        local_answer = answer_question(
+            str(payload.get("question", "请对当前推荐做重排序和分析")),
+            own_heroes,
+            enemy_heroes,
+            hero_meta,
+        )
+        prompt = self._llm_rerank_prompt(
+            payload,
+            state,
+            recommendations,
+            camp1_profile,
+            camp2_profile,
+            local_answer,
+        )
+        messages = self._llm_rerank_messages(prompt)
+        request_body = self._llm_rerank_request_body(messages)
+        base_response = {
+            "prompt": prompt,
+            "messages": messages,
+            "request_body": request_body,
+            "local_answer": local_answer,
+            "original_recommendations": recommendations,
+            "state": state.to_dict(),
+        }
+        if not api_key:
+            return {
+                **base_response,
+                "error": "云端 API Key 未配置。请设置 CLOUD_AI_API_KEY，或创建 cloud_api_config.json。",
+            }
+        result, error = self._call_cloud_ai(api_key, request_body, timeout=180)
+        if error:
+            return {
+                **base_response,
+                "error": error,
+            }
+        message = result.get("choices", [{}])[0].get("message", {})
+        content = message.get("content", "") or message.get("reasoning_content", "")
+        parsed = self._extract_json_from_llm_answer(content)
+        return {
+            **base_response,
+            "raw_answer": content,
+            "reranked": parsed.get("reranked", []),
+            "top3_analysis": parsed.get("top3_analysis", ""),
+            "key_decision": parsed.get("key_decision", ""),
+            "raw": result,
+        }
+
+    def _call_cloud_ai(
+        self,
+        api_key: str,
+        request_body: dict[str, object],
+        timeout: int = 120,
+    ) -> tuple[dict[str, object], str | None]:
+        body = json.dumps(request_body, ensure_ascii=False).encode("utf-8")
+        cloud_config = self._cloud_ai_config()
+        base_url = str(cloud_config.get("base_url") or self.cloud_ai_base_url)
+        req = request.Request(
+            f"{base_url.rstrip('/')}/chat/completions",
+            data=body,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+                "X-Failover-Enabled": "true",
+            },
+            method="POST",
+        )
+        try:
+            with request.urlopen(req, timeout=timeout) as response:
+                result = json.loads(response.read().decode("utf-8"))
+        except Exception as exc:
+            message = str(exc)
+            if "timed out" in message.lower():
+                return {}, f"云端 AI 请求超时（>{timeout}s）。请稍后重试，或改用更快的 rerank 模型。"
+            return {}, message
+        if not isinstance(result, dict):
+            return {}, "云端 API 返回格式异常。"
+        return result, None
+
+    def _extract_json_from_llm_answer(self, content: str) -> dict[str, object]:
+        text = (content or "").strip()
+        if not text:
+            return {}
+        candidates = [text]
+        fenced = re.findall(r"```(?:json)?\s*([\s\S]*?)```", text, flags=re.IGNORECASE)
+        candidates.extend(fenced)
+        for candidate in candidates:
+            candidate = candidate.strip()
+            if not candidate:
+                continue
+            try:
+                parsed = json.loads(candidate)
+            except json.JSONDecodeError:
+                start = candidate.find("{")
+                end = candidate.rfind("}")
+                if start >= 0 and end > start:
+                    try:
+                        parsed = json.loads(candidate[start : end + 1])
+                    except json.JSONDecodeError:
+                        continue
+                else:
+                    continue
+            if isinstance(parsed, dict):
+                return parsed
+        return {}
+
+    def _llm_rerank_messages(self, prompt: str) -> list[dict[str, str]]:
+        return [
+            {
+                "role": "system",
+                "content": (
+                    "你是 KPL 职业赛 BP 教练。你会基于本地模型 top 候选、BP 状态、"
+                    "队伍画像和阵容标签分析，对候选英雄重排序并给出具体理由。"
+                    "必须只输出 JSON，不要输出 Markdown 或额外解释。"
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ]
+
+    def _llm_rerank_request_body(self, messages: list[dict[str, str]]) -> dict[str, object]:
+        cloud_config = self._cloud_ai_config()
+        return {
+            "model": str(
+                cloud_config.get("rerank_model")
+                or cloud_config.get("model")
+                or self.cloud_ai_rerank_model
+            ),
+            "messages": messages,
+            "stream": False,
+            "max_tokens": 1200,
+            "temperature": 0.2,
+            "top_p": 0.7,
+            "top_k": 50,
+            "frequency_penalty": 0.2,
+        }
+
+    def _llm_rerank_prompt(
+        self,
+        payload: dict[str, object],
+        state: BPState,
+        recommendations: list[dict[str, object]],
+        camp1_profile,
+        camp2_profile,
+        local_answer: dict[str, object],
+    ) -> str:
+        question = str(payload.get("question", "请对当前推荐做重排序和分析")).strip()
+        mode = str(payload.get("mode", "single") or "single")
+        game_index = int(payload.get("game_index", 1) or 1)
+        camp1_global = self._global_used_for_deepseek(payload, "camp1")
+        camp2_global = self._global_used_for_deepseek(payload, "camp2")
+        team_profile_text = team_profiles_prompt_text(camp1_profile, camp2_profile)
+        return "\n".join(
+            [
+                "你是 KPL BP 教练，请对以下候选英雄做重排序和分析。",
+                "",
+                f"用户问题：{question}",
+                f"赛制模式：{mode}，当前第 {game_index} 局",
+                f"蓝方全局已用英雄：{json.dumps(camp1_global, ensure_ascii=False)}",
+                f"红方全局已用英雄：{json.dumps(camp2_global, ensure_ascii=False)}",
+                f"当前 BP 状态：{json.dumps(state.to_dict(), ensure_ascii=False)}",
+                f"本地模型 top 候选：{json.dumps(recommendations, ensure_ascii=False)}",
+                team_profile_text,
+                "",
+                "任务：",
+                "1. 综合模型评分和队伍画像，给出重排序（1-10名），每名附 1 句理由。",
+                "2. 指出哪些英雄因选手风格/擅长度特别加分或减分。",
+                "3. 给出前 3 名综合分析和一句下一手核心判断。",
+                "",
+                "仅输出 JSON，格式：",
+                "{",
+                '  "reranked": [',
+                '    {"rank": 1, "hero": "英雄名", "reason": "理由", "style_bonus": true, "original_rank": 3},',
+                "    ...",
+                "  ],",
+                '  "top3_analysis": "前 3 名综合分析",',
+                '  "key_decision": "下一手核心判断"',
+                "}",
+            ]
+        )
 
     def _cloud_ai_messages(self, prompt: str) -> list[dict[str, str]]:
         return [
@@ -395,6 +605,8 @@ class KPLBPHandler(SimpleHTTPRequestHandler):
         game_index = int(payload.get("game_index", 1) or 1)
         camp1_global = self._global_used_for_deepseek(payload, "camp1")
         camp2_global = self._global_used_for_deepseek(payload, "camp2")
+        camp1_profile, camp2_profile = team_profiles_from_payload(payload)
+        team_profile_text = team_profiles_prompt_text(camp1_profile, camp2_profile)
         return "\n".join(
             [
                 "请作为 KPL BP 教练分析下面局面。",
@@ -406,6 +618,7 @@ class KPLBPHandler(SimpleHTTPRequestHandler):
                 f"当前 BP 状态：{json.dumps(state.to_dict(), ensure_ascii=False)}",
                 f"本地模型推荐：{json.dumps(recommendations, ensure_ascii=False)}",
                 f"英雄标签阵容分析：{json.dumps(local_answer['analysis'], ensure_ascii=False)}",
+                team_profile_text,
                 f"BP 经验知识库：\n{knowledge}",
                 "",
                 "请严格按以下结构回答，不能省略蓝方或红方：",
@@ -509,7 +722,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--bp-knowledge", default=str(ROOT / "docs" / "BP_EXPERIENCE.md"))
     parser.add_argument("--cloud-config", default=str(ROOT / "cloud_api_config.json"))
     parser.add_argument("--cloud-ai-base-url", default=os.environ.get("CLOUD_AI_BASE_URL", "https://api.moark.com/v1"))
-    parser.add_argument("--cloud-ai-model", default=os.environ.get("CLOUD_AI_MODEL", "Qwen3.6-Max"))
+    parser.add_argument("--cloud-ai-model", default=os.environ.get("CLOUD_AI_MODEL", "DeepSeek-R1"))
+    parser.add_argument(
+        "--cloud-ai-rerank-model",
+        default=os.environ.get("CLOUD_AI_RERANK_MODEL", "Qwen3.6-Max"),
+    )
     return parser
 
 
@@ -521,6 +738,7 @@ def main() -> None:
     KPLBPHandler.cloud_config_path = Path(args.cloud_config)
     KPLBPHandler.cloud_ai_base_url = args.cloud_ai_base_url
     KPLBPHandler.cloud_ai_model = args.cloud_ai_model
+    KPLBPHandler.cloud_ai_rerank_model = args.cloud_ai_rerank_model
     server = ThreadingHTTPServer((args.host, args.port), KPLBPHandler)
     print(f"KPL BP app running at http://{args.host}:{args.port}")
     print("Press Ctrl+C to stop.")

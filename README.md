@@ -2,6 +2,20 @@
 
 这是一个基于 KPL 职业比赛数据的 BP 推荐 Agent。当前版本的目标不是直接预测整局比赛胜负，而是在给定当前 BP 局面的情况下，推荐下一手应该 ban 或 pick 的英雄，并返回候选英雄的综合排序。
 
+**本次更新核心能力：Agentic Workflow —— 大模型重排与辅助分析**
+
+在本地 BP Agent（策略模型 + 阵容价值 + 浅层搜索）给出 Top-K 候选后，可接入 OpenAI 兼容云端大模型，形成两层工作流：
+
+1. **队伍画像**：自定义蓝/红方选手姓名、分路、打法风格、状态、擅长/回避英雄，以及队伍整体风格与胜利条件。画像会注入云端 AI 与重排序 prompt，影响最终建议。
+2. **AI 重排序**（`POST /api/bp/llm-rerank`）：对本地模型 top-10 候选做 LLM 重排，返回逐英雄理由、Top3 综合分析、下一手核心判断。
+3. **云端 AI 复盘**（`POST /api/cloud-ai`）：结合 BP 状态、本地推荐、标签分析、队伍画像和 `docs/BP_EXPERIENCE.md` 做结构化 BP 教练式分析。
+
+简化流程：
+
+```text
+BP 局面 -> 本地 Agent Top-10 ->（可选）队伍画像 -> LLM 重排序 / 云端复盘 -> 前端展示
+```
+
 项目目前使用三类信息：
 
 - 历史 BP 顺序：学习职业队在不同 BP 阶段的真实选择。
@@ -59,10 +73,10 @@ Agent 输出 TopK 推荐：
 
 核心代码说明：
 
-- `kplbp/schema.py`：定义 BP 步骤、选手数据、英雄统计、BP 状态和训练样本。
+- `kplbp/schema.py`：定义 BP 步骤、选手数据、英雄统计、BP 状态、训练样本，以及 `PlayerProfile` / `TeamProfile` 队伍画像结构。
 - `kplbp/data.py`：读取 CSV、审计数据、展开 BP 样本、构建阵容胜率样本。
 - `kplbp/analysis.py`：基于英雄元数据做阵容结构、缺陷、强点和游戏思路分析。
-- `kplbp/api.py`：提供前端页面和元数据问答 API。
+- `kplbp/api.py`：提供前端页面、本地推荐 API、云端 AI 与 LLM 重排序 API。
 - `kplbp/models.py`：实现策略模型 `PolicyModel` 和阵容价值模型 `ValueModel`。
 - `kplbp/agent.py`：组合策略模型、价值模型和浅层搜索，输出最终推荐。
 - `kplbp/train.py`：训练入口。
@@ -263,7 +277,7 @@ python3 -m kplbp.recommend --state-json '{"order":4,"camp":1,"action_type":"pick
 - 前端：`web/index.html`，由后端静态托管
 - 本地模型：`models/kpl_bp_agent.json`
 - 英雄元数据：`hero_meta.csv`
-- 云端 AI：OpenAI 兼容接口，可选启用，默认适配 Moark `Qwen3.6-Max`
+- 云端 AI：OpenAI 兼容接口，可选启用；复盘默认 `DeepSeek-R1`，重排序默认 `Qwen3.6-Max`
 
 启动本地服务：
 
@@ -288,33 +302,51 @@ python3 -m kplbp.api --host 0.0.0.0 --port 8080
 不要把 API Key 写进代码、README 或提交到仓库。启动服务前在终端设置环境变量：
 
 ```bash
+export MOARK_API_KEY="你的云端 API Key"
+# 或
 export CLOUD_AI_API_KEY="你的云端 API Key"
 python3 -m kplbp.api
 ```
 
-后端会读取 `CLOUD_AI_API_KEY`，通过 `/api/cloud-ai` 调用云端 AI。若没有设置环境变量，接口会返回本地标签分析、完整 `prompt`、`messages` 和 `request_body`，方便调试每一次上传内容。
+后端会读取 `CLOUD_AI_API_KEY` / `MOARK_API_KEY` 等环境变量，通过 `/api/cloud-ai` 和 `/api/bp/llm-rerank` 调用云端大模型。若没有设置环境变量，接口会返回本地分析、完整 `prompt`、`messages` 和 `request_body`，方便调试。
+
+也可复制 `cloud_api_config.example.json` 为 `cloud_api_config.json`（不要提交真实 key）：
+
+```json
+{
+  "base_url": "https://api.moark.com/v1",
+  "model": "DeepSeek-R1",
+  "rerank_model": "Qwen3.6-Max",
+  "api_key": "建议使用环境变量"
+}
+```
 
 默认配置等价于 OpenAI 兼容调用：
 
 ```bash
 python3 -m kplbp.api \
   --cloud-ai-base-url https://api.moark.com/v1 \
-  --cloud-ai-model Qwen3.6-Max
+  --cloud-ai-model DeepSeek-R1 \
+  --cloud-ai-rerank-model Qwen3.6-Max
 ```
+
+请求会自动携带 `X-Failover-Enabled: true` header（Moark 故障转移）。
 
 ### BP 模拟器
 
 访问 `http://127.0.0.1:8000` 后，可以在页面完成以下操作：
 
 1. 输入蓝方和红方队伍名称。
-2. 选择赛制：单局、BO3 全局 BP、BO5 全局 BP、BO7 全局 BP、BO5/BO7 带最后一局巅峰对决。
-3. 选择当前第几局，并在页面中点击选择双方全局已用英雄池（不再需要手动输入名字）。
-4. 按当前 BP 步骤点击英雄，完成 ban 或 pick。
-5. 每一步后端会调用本地 BP Agent 返回推荐候选。
-6. 可以点击推荐英雄快速落子。
-7. 可以撤销一步或重置 BP。
-8. 可以调用本地标签分析、云端 AI 自定义提问，或一键实时分析当前 BP。
-9. 每完成一次 ban/pick，前端会自动调用一次云端 AI 分析当前 BP。
+2. 在「队伍画像」面板填写选手风格、段位、擅长英雄等（会随 AI 请求一起发送）。
+3. 选择赛制：单局、BO3 全局 BP、BO5 全局 BP、BO7 全局 BP、BO5/BO7 带最后一局巅峰对决。
+4. 选择当前第几局，并在页面中点击选择双方全局已用英雄池。
+5. **中间栏**按分路浏览并点击英雄完成 ban/pick；**左栏**为模拟设置，**右栏**为推荐与 AI 分析。
+6. 每一步后端会调用本地 BP Agent 返回 top-10 推荐候选。
+7. 点击「✨ AI 重排序」：调用大模型对 top-10 重排并给出逐英雄分析与核心判断（通常需等待 30–90 秒，页面会显示等待状态）。
+8. 可手动调用「本地标签分析」「云端 AI 提问」或「一键实时分析当前 BP」。
+9. 可以撤销一步或重置 BP。
+
+页面采用白色主色 + 深蓝/金色辅色的轻量 UI；所有大模型调用在等待期间会显示 loading 提示。
 
 ### 赛制规则说明
 
@@ -361,8 +393,45 @@ curl http://127.0.0.1:8000/api/bp/config
 ```bash
 curl -X POST http://127.0.0.1:8000/api/bp/recommend \
   -H 'Content-Type: application/json' \
-  -d '{"mode":"bo7_peak","game_index":2,"actions":[{"hero":"狄仁杰"},{"hero":"鲁班大师"},{"hero":"狂铁"},{"hero":"盾山"}],"camp1_global_used":"公孙离,沈梦溪","camp2_global_used":"戈娅,小乔","camp1_team":"北京JDG","camp2_team":"武汉eStarPro","top_k":5}'
+  -d '{"mode":"bo7_peak","game_index":2,"actions":[{"hero":"狄仁杰"},{"hero":"鲁班大师"},{"hero":"狂铁"},{"hero":"盾山"}],"camp1_global_used":"公孙离,沈梦溪","camp2_global_used":"戈娅,小乔","camp1_team":"北京JDG","camp2_team":"武汉eStarPro","top_k":10}'
 ```
+
+LLM 重排序（对本地 top-10 候选做 AI 重排与分析）：
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/bp/llm-rerank \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "mode":"single",
+    "actions":[],
+    "top_k":10,
+    "recommendations":[
+      {"hero":"公孙离","policy_score":0.08,"value_score":0.51,"score":0.19},
+      {"hero":"后羿","policy_score":0.07,"value_score":0.50,"score":0.18}
+    ],
+    "camp1_profile":{
+      "camp":1,"team_name":"北京JDG",
+      "players":[{"name":"选手A","lane":"发育路","style":"激进开团","tier":"巅峰","preferred_heroes":["公孙离"]}],
+      "overall_style":"早期压制"
+    },
+    "question":"请结合队伍画像重排序并分析"
+  }'
+```
+
+返回字段：
+
+- `reranked`：重排后的英雄列表（含 `rank`、`hero`、`reason`、`style_bonus`、`original_rank`）
+- `top3_analysis`：前三名综合分析
+- `key_decision`：下一手核心判断
+- `original_recommendations`：本地模型原始推荐
+- `error` / `prompt` / `raw_answer`：错误或调试信息
+
+队伍画像 payload 字段（`camp1_profile` / `camp2_profile`）：
+
+- `team_name`：队伍名称
+- `players[]`：`name`、`lane`、`style`、`tier`、`preferred_heroes`、`avoid_heroes`
+- `overall_style`：整体风格
+- `win_condition`：胜利条件偏好
 
 分析阵容：
 
@@ -395,6 +464,7 @@ curl -X POST http://127.0.0.1:8000/api/cloud-ai \
 - 用户问题
 - 当前 BP 状态
 - 本地 BP Agent 推荐
+- 蓝/红方队伍画像（选手风格、擅长英雄等）
 - 基于 `hero_meta.csv` 的阵容标签分析
 - `docs/BP_EXPERIENCE.md` 中的 BP 经验知识库
 - 要求模型分别输出蓝方优势/短板、红方优势/短板、下一手建议、全局 BP 资源判断、双方前中后期思路和风险点
