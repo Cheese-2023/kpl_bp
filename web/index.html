@@ -126,6 +126,11 @@
         grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
       }
 
+      .analysis-layout {
+        grid-template-columns: 360px minmax(0, 1fr);
+        align-items: start;
+      }
+
       .panel {
         border: 1px solid var(--line);
         border-radius: 24px;
@@ -607,6 +612,67 @@
         overflow: auto;
       }
 
+      .ai-preview-card {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--panel2);
+        margin-top: 12px;
+        padding: 14px;
+      }
+
+      .ai-preview-card h3 {
+        margin: 0 0 8px;
+        color: var(--blue);
+        font-size: 16px;
+      }
+
+      .ai-preview-text {
+        color: var(--muted);
+        line-height: 1.7;
+        max-height: 150px;
+        overflow: hidden;
+        white-space: pre-wrap;
+      }
+
+      .analysis-report {
+        display: grid;
+        gap: 14px;
+        margin-top: 12px;
+      }
+
+      .analysis-report-card {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--panel);
+        box-shadow: 0 6px 20px rgba(30, 77, 140, 0.06);
+        padding: 16px;
+      }
+
+      .analysis-report-card h3 {
+        margin: 0 0 10px;
+        color: var(--blue);
+        font-size: 17px;
+      }
+
+      .analysis-report-card div {
+        color: var(--text);
+        line-height: 1.82;
+        white-space: pre-wrap;
+      }
+
+      .analysis-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+      }
+
+      .analysis-toolbar h2 {
+        margin: 0;
+      }
+
       .hint {
         color: var(--muted);
         font-size: 12px;
@@ -640,6 +706,10 @@
         }
 
         .subpage {
+          grid-template-columns: 1fr;
+        }
+
+        .analysis-layout {
           grid-template-columns: 1fr;
         }
       }
@@ -757,7 +827,11 @@
           <button id="cloudAsk">云端 AI 提问</button>
         </div>
         <button id="cloudRealtime" style="width: 100%; margin-top: 10px">一键实时分析当前 BP</button>
-        <div id="cloudAnswer" class="analysis-box">等待分析。</div>
+        <div class="ai-preview-card">
+          <h3>AI 分析预览</h3>
+          <div id="cloudAnswer" class="ai-preview-text">等待分析。完整报告会展示在“阵容分析与云端 AI”页面。</div>
+          <button id="openAnalysisPage" class="secondary" style="width: 100%; margin-top: 12px">打开完整分析页</button>
+        </div>
       </section>
     </main>
 
@@ -775,7 +849,7 @@
       </section>
     </main>
 
-    <main id="analysisPage" class="page subpage">
+    <main id="analysisPage" class="page analysis-layout">
       <section class="panel">
         <h2>当前阵容快照</h2>
         <p class="hint">这里会同步 BP 棋盘中的蓝红阵容。你也可以直接在 BP 页面落子后切换到这里做复盘。</p>
@@ -795,9 +869,12 @@
         </div>
       </section>
       <section class="panel">
-        <h2>分析结果</h2>
+        <div class="analysis-toolbar">
+          <h2>完整 AI 分析报告</h2>
+          <button id="backToBpPage" class="secondary">返回 BP 模拟器</button>
+        </div>
         <textarea id="analysisQuestion">请分析双方阵容优劣、下一手 BP 方向、进入游戏后的前中后期打法。</textarea>
-        <div id="analysisAnswer" class="analysis-box" style="margin-top: 12px">等待分析。</div>
+        <div id="analysisAnswer" class="analysis-report">等待分析。</div>
       </section>
     </main>
 
@@ -826,6 +903,8 @@
         llmRerankLoading: false,
         cloudAiLoading: false,
         cloudAiLoadingMessage: "",
+        latestAiAnswer: "",
+        latestAiError: false,
         legalHeroes: [],
         strategyProfile: null,
         camp1GlobalUsed: [],
@@ -844,6 +923,84 @@
 
       function setStatus(message) {
         $("status").textContent = message;
+      }
+
+      function setActivePage(pageId) {
+        document.querySelectorAll(".nav button").forEach((item) => {
+          item.classList.toggle("active", item.dataset.page === pageId);
+        });
+        document.querySelectorAll(".page").forEach((item) => {
+          item.classList.toggle("active", item.id === pageId);
+        });
+        render();
+      }
+
+      function plainText(value) {
+        return String(value || "").replace(/\s+/g, " ").trim();
+      }
+
+      function escapeHtml(value) {
+        return String(value || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      function renderAiAnswer(answer, isError = false) {
+        app.latestAiAnswer = answer || "";
+        app.latestAiError = isError;
+        const preview = plainText(app.latestAiAnswer) || "等待分析。完整报告会展示在“阵容分析与云端 AI”页面。";
+        $("cloudAnswer").textContent = preview.length > 180 ? `${preview.slice(0, 180)}...` : preview;
+        renderAnalysisReport();
+      }
+
+      function renderAnalysisReport() {
+        if (app.cloudAiLoading) return;
+        const node = $("analysisAnswer");
+        node.classList.remove("is-loading");
+        node.innerHTML = "";
+        const answer = app.latestAiAnswer;
+        if (!answer) {
+          node.textContent = "等待分析。";
+          return;
+        }
+        if (app.latestAiError) {
+          const card = document.createElement("div");
+          card.className = "analysis-report-card";
+          card.innerHTML = `<h3>调用失败</h3><div>${escapeHtml(answer)}</div>`;
+          node.appendChild(card);
+          return;
+        }
+        const sections = splitAnalysisSections(answer);
+        sections.forEach((section) => {
+          const card = document.createElement("section");
+          card.className = "analysis-report-card";
+          card.innerHTML = `<h3>${escapeHtml(section.title)}</h3><div>${escapeHtml(section.body)}</div>`;
+          node.appendChild(card);
+        });
+      }
+
+      function splitAnalysisSections(text) {
+        const lines = String(text || "").split(/\n+/).map((line) => line.trim()).filter(Boolean);
+        const sections = [];
+        let current = null;
+        const headingPattern = /^(\d+[.、]|[一二三四五六七八九十]+[、.])\s*(.+)$/;
+        lines.forEach((line) => {
+          const match = line.match(headingPattern);
+          if (match) {
+            if (current) sections.push(current);
+            current = { title: match[2].replace(/[:：]$/, ""), body: "" };
+            return;
+          }
+          if (!current) {
+            current = { title: "综合判断", body: "" };
+          }
+          current.body += `${current.body ? "\n" : ""}${line}`;
+        });
+        if (current) sections.push(current);
+        return sections.length ? sections : [{ title: "完整分析", body: text }];
       }
 
       function aiWaitingHtml(message) {
@@ -1483,6 +1640,7 @@
         renderRecommendations();
         renderDashboard();
         renderMetaPage();
+        renderAnalysisReport();
       }
 
       async function localAsk() {
@@ -1498,8 +1656,7 @@
             question: $("cloudQuestion").value,
           }),
         });
-        $("cloudAnswer").textContent = payload.answer;
-        $("analysisAnswer").textContent = payload.answer;
+        renderAiAnswer(payload.answer);
       }
 
       async function cloudAsk(questionOverride = "", options = {}) {
@@ -1507,6 +1664,9 @@
         const silent = Boolean(options.silent);
         const loadingMessage = options.loadingMessage || "正在调用云端大模型分析 BP，预计需要 30-90 秒...";
         setCloudAiLoading(true, loadingMessage);
+        if (options.openFullReport) {
+          setActivePage("analysisPage");
+        }
         if (!silent) {
           setStatus(loadingMessage);
         }
@@ -1531,9 +1691,8 @@
           if (requestId !== app.cloudRequestId) return;
           const answer = payload.answer || payload.local_answer?.answer || payload.error || "无返回";
           $("cloudAnswer").classList.remove("is-loading");
-          $("cloudAnswer").textContent = answer;
           $("analysisAnswer").classList.remove("is-loading");
-          $("analysisAnswer").textContent = answer;
+          renderAiAnswer(answer, Boolean(payload.error));
           if (!silent) {
             setStatus(payload.error ? `云端 AI 未完成：${payload.error}` : "云端 AI 分析完成。");
           }
@@ -1541,9 +1700,8 @@
         } catch (error) {
           if (requestId !== app.cloudRequestId) return;
           $("cloudAnswer").classList.remove("is-loading");
-          $("cloudAnswer").textContent = error.message;
           $("analysisAnswer").classList.remove("is-loading");
-          $("analysisAnswer").textContent = error.message;
+          renderAiAnswer(error.message, true);
           if (!silent) {
             setStatus(error.message);
           }
@@ -1576,11 +1734,7 @@
       $("metaSearch").addEventListener("input", renderMetaPage);
       document.querySelectorAll(".nav button").forEach((button) => {
         button.addEventListener("click", () => {
-          document.querySelectorAll(".nav button").forEach((item) => item.classList.remove("active"));
-          document.querySelectorAll(".page").forEach((item) => item.classList.remove("active"));
-          button.classList.add("active");
-          $(button.dataset.page).classList.add("active");
-          render();
+          setActivePage(button.dataset.page);
         });
       });
       $("matchMode").addEventListener("change", () => {
@@ -1623,17 +1777,19 @@
       });
       $("resetBtn").addEventListener("click", () => {
         app.actions = [];
-        $("cloudAnswer").textContent = "等待分析。";
+        renderAiAnswer("");
         refreshRecommendations().catch((error) => setStatus(error.message));
       });
       $("localAsk").addEventListener("click", () => localAsk().catch((error) => setStatus(error.message)));
-      $("cloudAsk").addEventListener("click", () => cloudAsk().catch((error) => setStatus(error.message)));
+      $("cloudAsk").addEventListener("click", () => cloudAsk("", { openFullReport: true }).catch((error) => setStatus(error.message)));
+      $("openAnalysisPage").addEventListener("click", () => setActivePage("analysisPage"));
+      $("backToBpPage").addEventListener("click", () => setActivePage("bpPage"));
       $("cloudRealtime").addEventListener("click", () => {
         const slot = currentSlot();
         const action = slot?.action_type === "ban" ? "ban" : "pick";
         const side = slot?.camp === 1 ? "蓝方" : "红方";
         const question = `请实时分析当前 BP。现在轮到${side}${action}，请结合本地模型推荐，直接给出下一手建议、我方阵容优劣、敌方阵容威胁和进入游戏后的打法。`;
-        cloudAsk(question).catch((error) => setStatus(error.message));
+        cloudAsk(question, { openFullReport: true }).catch((error) => setStatus(error.message));
       });
       $("analysisLocal").addEventListener("click", () => {
         $("cloudQuestion").value = $("analysisQuestion").value;
@@ -1641,7 +1797,7 @@
       });
       $("analysisCloud").addEventListener("click", () => {
         $("cloudQuestion").value = $("analysisQuestion").value;
-        cloudAsk().catch((error) => setStatus(error.message));
+        cloudAsk("", { openFullReport: true }).catch((error) => setStatus(error.message));
       });
 
       loadConfig().catch((error) => setStatus(error.message));
